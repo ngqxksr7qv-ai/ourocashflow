@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cash Flow Planner</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>☀️ Cash Flow Planner</h1>
+      <p>Keep your finances clear and stress-free</p>
+    </div>
+
+    <!-- Data Banner -->
+    <div class="data-banner">
+      <div class="data-banner-icon">📁</div>
+      <div class="data-banner-text">
+        <div class="data-banner-title">Your data is stored locally</div>
+        <div class="data-banner-desc">Export before closing, import when returning on a new device.</div>
+      </div>
+      <div class="data-banner-actions">
+        <button class="btn btn-primary btn-sm" onclick="exportData()">Export Data</button>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('importFile').click()">Import Data</button>
+        <input type="file" id="importFile" accept=".json" onchange="importData(event)">
+        <button class="btn btn-secondary btn-sm" onclick="previewCleanup()">🧹 Clean Up</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmClearAll()">Clear All</button>
+      </div>
+    </div>
+
+    <!-- Setup Welcome -->
+    <div id="setupPrompt" class="setup-welcome">
+      <div class="setup-welcome-icon">👋</div>
+      <h2>Welcome! Let's get started</h2>
+      <p>Enter your current bank balance below to begin forecasting your cash flow.</p>
+      <div class="setup-steps">
+        <div class="setup-step">
+          <div class="setup-step-num">1</div>
+          <div class="setup-step-text">Enter today's balance</div>
+        </div>
+        <div class="setup-step">
+          <div class="setup-step-num">2</div>
+          <div class="setup-step-text">Add income & expenses</div>
+        </div>
+        <div class="setup-step">
+          <div class="setup-step-num">3</div>
+          <div class="setup-step-text">Review your forecast</div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="dismissSetup()">Let's Go!</button>
+    </div>
+
+    <!-- LOC Alert -->
+    <div id="locAlert" class="alert alert-danger hidden">
+      <div class="alert-icon">⚠️</div>
+      <div class="alert-content">
+        <div class="alert-title">Heads up! You may need to draw on your line of credit</div>
+        <div class="alert-text" id="locAlertText"></div>
+      </div>
+    </div>
+
+    <!-- Upcoming LOC Transaction Alert -->
+    <div id="locUpcomingAlert" class="alert alert-purple hidden">
+      <div class="alert-icon">🏦</div>
+      <div class="alert-content">
+        <div class="alert-title">Planned LOC transaction coming up</div>
+        <div class="alert-text" id="locUpcomingText"></div>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="metrics-header">
+      <div class="metrics-title">Dashboard</div>
+      <div class="metrics-timeframe">
+        <span class="metrics-timeframe-label">Forecast period:</span>
+        <select id="metricsTimeframe" onchange="updateMetricsTimeframe()">
+          <option value="30">1 Month</option>
+          <option value="60">2 Months</option>
+          <option value="90" selected>3 Months</option>
+          <option value="180">6 Months</option>
+          <option value="custom">Custom Range</option>
+        </select>
+        <div id="customDateRange" class="custom-date-range" style="display: none;">
+          <input type="date" id="metricsStartDate" onchange="updateCustomDateRange()">
+          <span>to</span>
+          <input type="date" id="metricsEndDate" onchange="updateCustomDateRange()">
+        </div>
+      </div>
+    </div>
+    <div class="metrics-grid" id="metricsGrid"></div>
+
+    <!-- Cash Reminder -->
+    <div class="cash-reminder">
+      <div class="cash-reminder-icon">💡</div>
+      <div class="cash-reminder-text">Remember to update today's cash balance before reviewing your forecast</div>
+    </div>
+
+    <!-- Settings -->
+    <div class="card" id="cashSettingsCard">
+      <div class="card-title">Cash Position</div>
+      <div class="form-grid">
+        <div class="input-group" id="currentCashGroup">
+          <label>Current Cash Balance</label>
+          <input type="number" class="input" id="currentCash" value="15000" onchange="updateSettings()" onfocus="onCashInputFocus()" style="font-family: 'IBM Plex Mono', monospace;">
+        </div>
+        <div class="input-group">
+          <label>Line of Credit Limit</label>
+          <input type="number" class="input" id="locLimit" value="50000" onchange="updateSettings()" style="font-family: 'IBM Plex Mono', monospace;">
+        </div>
+        <div class="input-group">
+          <label>Current LOC Balance</label>
+          <input type="number" class="input" id="locBalance" value="0" onchange="updateSettings()" style="font-family: 'IBM Plex Mono', monospace;">
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('forecast')">Timeline</button>
+      <button class="tab" onclick="showTab('table')">Table View</button>
+      <button class="tab" onclick="showTab('entries')">Projection Items</button>
+      <button class="tab" onclick="showTab('checklist')">Checklist</button>
+    </div>
+
+    <!-- Forecast Tab -->
+    <div id="forecastTab" class="card">
+      <div class="card-title">
+        <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+          <span>Cash Flow Timeline</span>
+          <div class="metrics-timeframe">
+            <select id="timelineTimeframe" onchange="updateTimelineTimeframe()">
+              <option value="30">1 Month</option>
+              <option value="60">2 Months</option>
+              <option value="90">3 Months</option>
+              <option value="180">6 Months</option>
+              <option value="custom">Custom Range</option>
+            </select>
+            <div id="timelineCustomDateRange" class="custom-date-range" style="display: none;">
+              <input type="date" id="timelineStartDate" onchange="updateTimelineCustomDateRange()">
+              <span>to</span>
+              <input type="date" id="timelineEndDate" onchange="updateTimelineCustomDateRange()">
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 16px; font-size: 13px; font-weight: normal;">
+          <span><span style="display: inline-block; width: 12px; height: 12px; background: var(--accent-green); border-radius: 3px; margin-right: 6px;"></span>Income</span>
+          <span><span style="display: inline-block; width: 12px; height: 12px; background: var(--accent-coral); border-radius: 3px; margin-right: 6px;"></span>Expense</span>
+        </div>
+      </div>
+      <div class="chart-container" id="chartContainer">
+        <div class="chart-scale" id="chartScale"></div>
+        <div class="chart-svg-container">
+          <svg id="chartSvg" width="100%" height="100%" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="chart-tooltip" id="chartTooltip">
+          <div class="chart-tooltip-date" id="tooltipDate"></div>
+          <div class="chart-tooltip-balance" id="tooltipBalance"></div>
+        </div>
+      </div>
+      <div class="scroll-container" id="forecastList"></div>
+    </div>
+
+    <!-- Table View Tab -->
+    <div id="tableTab" class="card hidden">
+      <div class="card-title">
+        <span>Cash Flow Breakdown</span>
+        <div class="view-toggle">
+          <button class="view-toggle-btn active" onclick="setTableView('monthly')">Monthly</button>
+          <button class="view-toggle-btn" onclick="setTableView('weekly')">Weekly</button>
+        </div>
+      </div>
+      <div class="table-view" id="tableView"></div>
+    </div>
+
+    <!-- Entries Tab -->
+    <div id="entriesTab" class="card hidden">
+      <div class="card-title">
+        Projection Items
+        <button class="btn btn-primary" onclick="toggleAddForm()">+ Add New</button>
+      </div>
+
+      <div id="addForm" class="add-form hidden">
+        <div class="add-form-header">
+          <div class="add-form-title" id="formTitle">Add New Entry</div>
+          <button class="btn btn-secondary btn-sm hidden" id="cancelEditBtn" onclick="cancelEdit()">Cancel</button>
+        </div>
+        <div class="form-grid">
+          <div class="input-group">
+            <label>Start Date</label>
+            <input type="date" class="input" id="newDate">
+          </div>
+          <div class="input-group">
+            <label>Description</label>
+            <input type="text" class="input" id="newDesc" placeholder="e.g., Monthly rent">
+          </div>
+          <div class="input-group">
+            <label>Type</label>
+            <select class="input" id="newType">
+              <option value="expense">Expense</option>
+              <option value="revenue">Income</option>
+              <option value="loc_draw">LOC Draw (borrow)</option>
+              <option value="loc_paydown">LOC Paydown (repay)</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label>Amount</label>
+            <input type="number" class="input" id="newAmount" placeholder="0" style="font-family: 'IBM Plex Mono', monospace;">
+          </div>
+          <div class="input-group">
+            <label>Frequency</label>
+            <select class="input" id="newRecurring" onchange="toggleEndCondition()">
+              <option value="once">One-time</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="every2weeks">Every 2 weeks</option>
+              <option value="every4weeks">Every 4 weeks</option>
+              <option value="semimonthly">Semimonthly</option>
+              <option value="monthly">Monthly</option>
+              <option value="every2months">Every 2 months</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="every4months">Every 4 months</option>
+              <option value="semiannual">Semiannual</option>
+              <option value="annual">Annual</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="endConditionRow" class="end-condition-row hidden">
+          <div class="input-group" style="min-width: 140px;">
+            <label>End Condition</label>
+            <select class="input" id="endConditionType" onchange="toggleEndConditionInputs()">
+              <option value="never">Ongoing</option>
+              <option value="date">On specific date</option>
+              <option value="occurrences">After # times</option>
+            </select>
+          </div>
+          <div class="input-group hidden" id="endDateGroup" style="min-width: 140px;">
+            <label>End Date</label>
+            <input type="date" class="input" id="endDate">
+          </div>
+          <div class="input-group hidden" id="endOccurrencesGroup" style="min-width: 120px;">
+            <label># of Times</label>
+            <input type="number" class="input" id="endOccurrences" placeholder="e.g., 12" min="1">
+          </div>
+        </div>
+
+        <div style="margin-top: 20px;">
+          <button class="btn btn-primary" id="formSubmitBtn" onclick="submitEntry()">Add to Forecast</button>
+        </div>
+      </div>
+
+      <div id="entriesList"></div>
+    </div>
+
+    <!-- Checklist Tab -->
+    <div id="checklistTab" class="card hidden">
+      <div class="card-title">Things to Keep in Mind</div>
+      <div id="checklistContent"></div>
+      <div class="info-box">
+        <div class="info-box-title">The key to good forecasting</div>
+        <div class="info-box-text">
+          Keep your data current and this tool will help you see problems before they happen. You know your committed expenses better than any accounting system—use that knowledge here.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
