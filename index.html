@@ -3,29 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cash Flow Planner</title>
+  <title>Ouro Cash Flow</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>☀️ Cash Flow Planner</h1>
-      <p>Keep your finances clear and stress-free</p>
+      <h1>Ouro Cash Flow</h1>
+      <p>Track and plan your cash flow and credit usage.</p>
     </div>
 
-    <!-- Data Banner -->
-    <div class="data-banner">
-      <div class="data-banner-icon">📁</div>
+    <!-- Data Warning Banner -->
+    <div class="data-warning-banner">
+      <div class="data-banner-icon">⚠️</div>
       <div class="data-banner-text">
-        <div class="data-banner-title">Your data is stored locally</div>
-        <div class="data-banner-desc">Export before closing, import when returning on a new device.</div>
+        <div class="data-banner-title">⚡ Important: Your data is stored locally in your browser</div>
+        <div class="data-banner-desc">Export regularly and save somewhere safe like Google Drive before closing. Your data will be lost if you clear your browser data or use a different device.</div>
       </div>
       <div class="data-banner-actions">
         <button class="btn btn-primary btn-sm" onclick="exportData()">Export Data</button>
         <button class="btn btn-secondary btn-sm" onclick="document.getElementById('importFile').click()">Import Data</button>
         <input type="file" id="importFile" accept=".json" onchange="importData(event)">
-        <button class="btn btn-secondary btn-sm" onclick="previewCleanup()">🧹 Clean Up</button>
-        <button class="btn btn-danger btn-sm" onclick="confirmClearAll()">Clear All</button>
       </div>
     </div>
 
@@ -159,6 +157,18 @@
         </div>
       </div>
       <div class="scroll-container" id="forecastList"></div>
+      <div class="pagination-controls">
+        <div class="pagination-info" id="timelinePaginationInfo"></div>
+        <div class="pagination-actions">
+          <select class="pagination-select" id="timelineItemsPerPage" onchange="updateTimelineItemsPerPage()">
+            <option value="25">25 items</option>
+            <option value="50" selected>50 items</option>
+            <option value="100">100 items</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" id="timelinePrevBtn" onclick="changeTimelinePage(-1)">Previous</button>
+          <button class="btn btn-secondary btn-sm" id="timelineNextBtn" onclick="changeTimelinePage(1)">Next</button>
+        </div>
+      </div>
     </div>
 
     <!-- Table View Tab -->
@@ -251,6 +261,18 @@
       </div>
 
       <div id="entriesList"></div>
+      <div class="pagination-controls">
+        <div class="pagination-info" id="entriesPaginationInfo"></div>
+        <div class="pagination-actions">
+          <select class="pagination-select" id="entriesItemsPerPage" onchange="updateEntriesItemsPerPage()">
+            <option value="25">25 items</option>
+            <option value="50" selected>50 items</option>
+            <option value="100">100 items</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" id="entriesPrevBtn" onclick="changeEntriesPage(-1)">Previous</button>
+          <button class="btn btn-secondary btn-sm" id="entriesNextBtn" onclick="changeEntriesPage(1)">Next</button>
+        </div>
+      </div>
     </div>
 
     <!-- Checklist Tab -->
@@ -262,6 +284,18 @@
         <div class="info-box-text">
           Keep your data current and this tool will help you see problems before they happen. You know your committed expenses better than any accounting system—use that knowledge here.
         </div>
+      </div>
+    </div>
+
+    <!-- Data Clean Up Section -->
+    <div class="card data-cleanup-section">
+      <div class="card-title">Data Clean Up</div>
+      <div class="cleanup-info">
+        <p>Clean up old data every couple of months for a cleaner view and faster performance. This will remove old one-time transactions and update recurring items to their next occurrence.</p>
+      </div>
+      <div class="cleanup-actions">
+        <button class="btn btn-secondary" onclick="previewCleanup()">🧹 Clean Up Old Items</button>
+        <button class="btn btn-danger" onclick="confirmClearAll()">Clear All Data</button>
       </div>
     </div>
   </div>

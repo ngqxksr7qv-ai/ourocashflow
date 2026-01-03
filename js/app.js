@@ -10,6 +10,10 @@ let state = {
   metricsCustomStart: null,
   metricsCustomEnd: null,
   tableView: 'monthly',
+  timelineItemsPerPage: 50,
+  timelineCurrentPage: 1,
+  entriesItemsPerPage: 50,
+  entriesCurrentPage: 1,
   entries: [
     { id: 1, date: '2026-01-02', description: 'Daily Sales', type: 'revenue', amount: 1200, frequency: 'daily' },
     { id: 2, date: '2026-01-05', description: 'Inventory Restock', type: 'expense', amount: 8500, frequency: 'once' },
@@ -479,7 +483,17 @@ function renderChart(forecast) {
 
 function renderForecast(forecast) {
   const daysWithEntries = forecast.dailyForecast.filter(day => day.entries.length > 0);
-  const html = daysWithEntries.map(day => {
+
+  // Pagination
+  const itemsPerPage = state.timelineItemsPerPage;
+  const currentPage = state.timelineCurrentPage;
+  const totalItems = daysWithEntries.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedDays = daysWithEntries.slice(startIndex, endIndex);
+
+  const html = paginatedDays.map(day => {
     const entriesHtml = day.entries.map(entry => {
       let colorClass = '';
       let prefix = '';
@@ -520,6 +534,34 @@ function renderForecast(forecast) {
     `;
   }).join('');
   document.getElementById('forecastList').innerHTML = html || '<p style="color: var(--text-muted); padding: 24px; text-align: center;">No transactions in this period</p>';
+
+  // Update pagination info and buttons
+  updateTimelinePagination(totalItems, currentPage, totalPages);
+}
+
+function updateTimelinePagination(totalItems, currentPage, totalPages) {
+  const startItem = totalItems === 0 ? 0 : (currentPage - 1) * state.timelineItemsPerPage + 1;
+  const endItem = Math.min(currentPage * state.timelineItemsPerPage, totalItems);
+
+  document.getElementById('timelinePaginationInfo').textContent =
+    totalItems > 0 ? `Showing ${startItem}-${endItem} of ${totalItems} days` : 'No items to display';
+
+  document.getElementById('timelinePrevBtn').disabled = currentPage === 1;
+  document.getElementById('timelineNextBtn').disabled = currentPage >= totalPages || totalPages === 0;
+  document.getElementById('timelineItemsPerPage').value = state.timelineItemsPerPage;
+}
+
+function changeTimelinePage(delta) {
+  state.timelineCurrentPage = Math.max(1, state.timelineCurrentPage + delta);
+  saveState();
+  render();
+}
+
+function updateTimelineItemsPerPage() {
+  state.timelineItemsPerPage = parseInt(document.getElementById('timelineItemsPerPage').value);
+  state.timelineCurrentPage = 1;
+  saveState();
+  render();
 }
 
 function renderTableView() {
@@ -560,7 +602,6 @@ function renderTableView() {
     Object.values(months).forEach(m => periods.push(m));
   } else {
     let weekStart = new Date(today);
-    let weekNum = 1;
     while (weekStart <= new Date(today.getTime() + 90 * 86400000)) {
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekEnd.getDate() + 6);
@@ -575,8 +616,14 @@ function renderTableView() {
         const expenses = weekDays.reduce((s, d) => s + d.expenses, 0);
         const locDraws = weekDays.reduce((s, d) => s + d.locDraws, 0);
         const locPaydowns = weekDays.reduce((s, d) => s + d.locPaydowns, 0);
+
+        // Format date range label
+        const startDateStr = weekStart.toISOString().split('T')[0];
+        const endDateStr = weekEnd.toISOString().split('T')[0];
+        const dateRangeLabel = `${formatDate(startDateStr)} - ${formatDate(endDateStr)}`;
+
         periods.push({
-          label: `Week ${weekNum}`,
+          label: dateRangeLabel,
           revenue,
           expenses,
           locDraws,
@@ -588,7 +635,6 @@ function renderTableView() {
         });
       }
       weekStart.setDate(weekStart.getDate() + 7);
-      weekNum++;
     }
   }
 
@@ -694,7 +740,16 @@ function renderEntries() {
   const existingIds = new Set(state.entries.map(e => e.id));
   selectedEntries = new Set([...selectedEntries].filter(id => existingIds.has(id)));
 
-  const allSelected = sortedEntries.length > 0 && sortedEntries.every(e => selectedEntries.has(e.id));
+  // Pagination
+  const itemsPerPage = state.entriesItemsPerPage;
+  const currentPage = state.entriesCurrentPage;
+  const totalItems = sortedEntries.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedEntries = sortedEntries.slice(startIndex, endIndex);
+
+  const allSelected = paginatedEntries.length > 0 && paginatedEntries.every(e => selectedEntries.has(e.id));
   const someSelected = selectedEntries.size > 0;
 
   const batchActionsHtml = someSelected ? `
@@ -705,7 +760,7 @@ function renderEntries() {
     </div>
   ` : '';
 
-  const headerHtml = sortedEntries.length > 0 ? `
+  const headerHtml = paginatedEntries.length > 0 ? `
     <div class="entry-header">
       <div class="checkbox-wrapper">
         <div class="checkbox ${allSelected ? 'checked' : ''}" onclick="toggleSelectAll()"></div>
@@ -726,7 +781,7 @@ function renderEntries() {
     'loc_paydown': 'LOC Paydown'
   };
 
-  const entriesHtml = sortedEntries.map(entry => {
+  const entriesHtml = paginatedEntries.map(entry => {
     const freqLabel = frequencyLabels[entry.frequency] || entry.frequency;
     const isSelected = selectedEntries.has(entry.id);
     let endLabel = '';
@@ -775,6 +830,34 @@ function renderEntries() {
   }).join('');
 
   document.getElementById('entriesList').innerHTML = batchActionsHtml + headerHtml + (entriesHtml || '<p style="color: var(--text-muted); padding: 24px; text-align: center;">No items yet. Add your first income or expense above!</p>');
+
+  // Update pagination info and buttons
+  updateEntriesPagination(totalItems, currentPage, totalPages);
+}
+
+function updateEntriesPagination(totalItems, currentPage, totalPages) {
+  const startItem = totalItems === 0 ? 0 : (currentPage - 1) * state.entriesItemsPerPage + 1;
+  const endItem = Math.min(currentPage * state.entriesItemsPerPage, totalItems);
+
+  document.getElementById('entriesPaginationInfo').textContent =
+    totalItems > 0 ? `Showing ${startItem}-${endItem} of ${totalItems} items` : 'No items to display';
+
+  document.getElementById('entriesPrevBtn').disabled = currentPage === 1;
+  document.getElementById('entriesNextBtn').disabled = currentPage >= totalPages || totalPages === 0;
+  document.getElementById('entriesItemsPerPage').value = state.entriesItemsPerPage;
+}
+
+function changeEntriesPage(delta) {
+  state.entriesCurrentPage = Math.max(1, state.entriesCurrentPage + delta);
+  saveState();
+  render();
+}
+
+function updateEntriesItemsPerPage() {
+  state.entriesItemsPerPage = parseInt(document.getElementById('entriesItemsPerPage').value);
+  state.entriesCurrentPage = 1;
+  saveState();
+  render();
 }
 
 function renderChecklist(forecast) {

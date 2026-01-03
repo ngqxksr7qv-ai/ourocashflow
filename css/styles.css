@@ -193,6 +193,20 @@ body {
   flex-wrap: wrap;
 }
 
+/* Data Warning Banner */
+.data-warning-banner {
+  background: linear-gradient(135deg, var(--accent-amber-light) 0%, #fef3e8 100%);
+  border: 2px solid var(--accent-amber);
+  border-radius: var(--radius-lg);
+  padding: 18px 24px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  box-shadow: 0 4px 12px rgba(221, 161, 94, 0.15);
+}
+
 .data-banner-icon {
   font-size: 28px;
 }
@@ -351,6 +365,12 @@ body {
 
 .btn-danger:hover {
   background: #f9e4df;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 /* Inputs */
@@ -1121,6 +1141,65 @@ body {
   margin-bottom: 20px;
   font-size: 14px;
   color: #a67c3d;
+}
+
+/* Pagination Controls */
+.pagination-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  margin-top: 16px;
+  border-top: 1px solid var(--border-light);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.pagination-info {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.pagination-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.pagination-select {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.pagination-select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+/* Data Cleanup Section */
+.data-cleanup-section {
+  margin-top: 32px;
+  background: var(--bg-warm);
+}
+
+.cleanup-info {
+  margin-bottom: 20px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.cleanup-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 /* Utility Classes */
