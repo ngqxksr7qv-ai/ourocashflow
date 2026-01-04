@@ -319,6 +319,31 @@ body {
   font-weight: 600;
 }
 
+/* Export Reminder */
+.export-reminder {
+  background: linear-gradient(135deg, var(--accent-blue-light) 0%, #dceef4 100%);
+  border: 1px solid var(--accent-blue);
+  border-radius: var(--radius-md);
+  padding: 12px 18px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.export-reminder-icon {
+  font-size: 20px;
+}
+
+.export-reminder-text {
+  flex: 1;
+  color: #4a7c91;
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 200px;
+}
+
 /* Buttons */
 .btn {
   padding: 10px 20px;
@@ -669,7 +694,7 @@ body {
 /* Entries */
 .entry-header {
   display: grid;
-  grid-template-columns: 40px 90px 1fr 90px 90px 100px 130px;
+  grid-template-columns: 40px 90px 1fr 90px 90px 100px 190px;
   align-items: center;
   padding: 10px 16px;
   gap: 12px;
@@ -684,7 +709,7 @@ body {
 
 .entry-row {
   display: grid;
-  grid-template-columns: 40px 90px 1fr 90px 90px 100px 130px;
+  grid-template-columns: 40px 90px 1fr 90px 90px 100px 190px;
   align-items: center;
   padding: 14px 16px;
   border-radius: var(--radius-sm);
@@ -858,6 +883,24 @@ body {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--border-light);
+}
+
+/* Forecast Header */
+.forecast-header {
+  display: grid;
+  grid-template-columns: 90px 1fr 100px 120px;
+  align-items: center;
+  padding: 10px 16px;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 8px;
+  background: var(--bg-warm);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 
 /* Forecast Row */
@@ -1225,6 +1268,10 @@ input[type="file"] {
   }
 
   .entry-header {
+    display: none;
+  }
+
+  .forecast-header {
     display: none;
   }
 
