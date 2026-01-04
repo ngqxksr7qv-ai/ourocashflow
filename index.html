@@ -140,6 +140,10 @@
               <input type="date" id="timelineEndDate" onchange="updateTimelineCustomDateRange()">
             </div>
           </div>
+          <label class="sync-filter-label" style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); cursor: pointer;">
+            <input type="checkbox" id="syncFiltersCheckbox" onchange="toggleSyncFilters()" style="cursor: pointer;">
+            Sync with Dashboard
+          </label>
         </div>
         <div style="display: flex; gap: 16px; font-size: 13px; font-weight: normal;">
           <span><span style="display: inline-block; width: 12px; height: 12px; background: var(--accent-green); border-radius: 3px; margin-right: 6px;"></span>Income</span>
