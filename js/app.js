@@ -9,6 +9,7 @@ let state = {
   metricsTimeframe: 90,
   metricsCustomStart: null,
   metricsCustomEnd: null,
+  syncFilters: false,
   tableView: 'monthly',
   timelineItemsPerPage: 50,
   timelineCurrentPage: 1,
@@ -75,6 +76,11 @@ function loadState() {
     } else if (state.timeRange) {
       document.getElementById('timelineTimeframe').value = state.timeRange;
     }
+
+    // Restore sync filters checkbox
+    if (state.syncFilters) {
+      document.getElementById('syncFiltersCheckbox').checked = true;
+    }
   }
 }
 
@@ -84,7 +90,11 @@ function exportData() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'cashflow-' + new Date().toISOString().split('T')[0] + '.json';
+  // Include date and time in filename (format: cashflow-YYYY-MM-DD-HHmmss.json)
+  const now = new Date();
+  const timestamp = now.toISOString().split('T')[0] + '-' +
+    now.toTimeString().split(' ')[0].replace(/:/g, '');
+  a.download = 'cashflow-' + timestamp + '.json';
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -173,17 +183,28 @@ function getNextOccurrence(currentDate, frequency) {
   return next;
 }
 
-function expandEntries(entries, daysToForecast = 30) {
+function expandEntries(entries, daysToForecast = 30, customStartDate = null, customEndDate = null) {
   const expanded = [];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const endDate = new Date(today);
-  endDate.setDate(endDate.getDate() + daysToForecast);
+
+  // Use custom dates if provided, otherwise use today + daysToForecast
+  const startDate = customStartDate ? new Date(customStartDate + 'T00:00:00') : today;
+  startDate.setHours(0, 0, 0, 0);
+
+  let endDate;
+  if (customEndDate) {
+    endDate = new Date(customEndDate + 'T00:00:00');
+  } else {
+    endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + daysToForecast);
+  }
+  endDate.setHours(0, 0, 0, 0);
 
   entries.forEach(entry => {
     if (entry.frequency === 'once') {
       const entryDate = new Date(entry.date + 'T12:00:00');
-      if (entryDate >= today && entryDate <= endDate) {
+      if (entryDate >= startDate && entryDate <= endDate) {
         expanded.push({ ...entry, originalId: entry.id });
       }
     } else {
@@ -196,7 +217,7 @@ function expandEntries(entries, daysToForecast = 30) {
         if (endByDate && currentDate > endByDate) break;
         if (occurrenceCount >= maxOccurrences) break;
 
-        if (currentDate >= today) {
+        if (currentDate >= startDate) {
           expanded.push({
             ...entry,
             date: currentDate.toISOString().split('T')[0],
@@ -215,8 +236,8 @@ function expandEntries(entries, daysToForecast = 30) {
   return expanded.sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
-function calculateForecast(daysToForecast = 30) {
-  const expandedEntries = expandEntries(state.entries, daysToForecast);
+function calculateForecast(daysToForecast = 30, customStartDate = null, customEndDate = null) {
+  const expandedEntries = expandEntries(state.entries, daysToForecast, customStartDate, customEndDate);
   let runningBalance = state.currentCash;
   let runningLocBalance = state.locBalance;
   let locDrawRequired = false;
@@ -232,10 +253,24 @@ function calculateForecast(daysToForecast = 30) {
   const sevenDaysOut = new Date(today);
   sevenDaysOut.setDate(sevenDaysOut.getDate() + 7);
 
+  // Determine forecast date range
+  const forecastStart = customStartDate ? new Date(customStartDate + 'T00:00:00') : today;
+  forecastStart.setHours(0, 0, 0, 0);
+
+  let forecastEnd;
+  if (customEndDate) {
+    forecastEnd = new Date(customEndDate + 'T00:00:00');
+  } else {
+    forecastEnd = new Date(forecastStart);
+    forecastEnd.setDate(forecastEnd.getDate() + daysToForecast);
+  }
+
+  const totalDays = Math.ceil((forecastEnd - forecastStart) / (1000 * 60 * 60 * 24));
+
   const dailyForecast = [];
 
-  for (let i = 0; i <= daysToForecast; i++) {
-    const date = new Date(today);
+  for (let i = 0; i <= totalDays; i++) {
+    const date = new Date(forecastStart);
     date.setDate(date.getDate() + i);
     const dateStr = date.toISOString().split('T')[0];
 
@@ -313,8 +348,20 @@ function calculateForecast(daysToForecast = 30) {
 
 // ==================== RENDERING ====================
 function render() {
-  const dashboardForecast = calculateForecast(state.metricsTimeframe);
-  const timelineForecast = calculateForecast(state.timeRange);
+  // Calculate dashboard forecast with optional custom date range
+  const dashboardForecast = calculateForecast(
+    state.metricsTimeframe,
+    state.metricsCustomStart,
+    state.metricsCustomEnd
+  );
+
+  // Calculate timeline forecast with optional custom date range
+  const timelineForecast = calculateForecast(
+    state.timeRange,
+    state.timelineCustomStart,
+    state.timelineCustomEnd
+  );
+
   renderMetrics(dashboardForecast);
   renderLOCAlert(dashboardForecast);
   renderChart(timelineForecast);
@@ -929,6 +976,12 @@ function updateMetricsTimeframe() {
     state.metricsTimeframe = parseInt(select.value);
     state.metricsCustomStart = null;
     state.metricsCustomEnd = null;
+
+    // Sync to timeline if enabled
+    if (state.syncFilters) {
+      syncDashboardToTimeline();
+    }
+
     saveState();
     render();
   }
@@ -947,6 +1000,11 @@ function updateCustomDateRange() {
     const end = new Date(endDate);
     const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
     state.metricsTimeframe = Math.max(1, days);
+
+    // Sync to timeline if enabled
+    if (state.syncFilters) {
+      syncDashboardToTimeline();
+    }
 
     saveState();
     render();
@@ -986,6 +1044,12 @@ function updateTimelineTimeframe() {
     state.timeRange = parseInt(select.value);
     state.timelineCustomStart = null;
     state.timelineCustomEnd = null;
+
+    // Sync to dashboard if enabled
+    if (state.syncFilters) {
+      syncTimelineToDashboard();
+    }
+
     saveState();
     render();
   }
@@ -1005,9 +1069,72 @@ function updateTimelineCustomDateRange() {
     const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
     state.timeRange = Math.max(1, days);
 
+    // Sync to dashboard if enabled
+    if (state.syncFilters) {
+      syncTimelineToDashboard();
+    }
+
     saveState();
     render();
   }
+}
+
+function toggleSyncFilters() {
+  state.syncFilters = document.getElementById('syncFiltersCheckbox').checked;
+
+  if (state.syncFilters) {
+    // When enabling sync, copy dashboard settings to timeline
+    syncDashboardToTimeline();
+  }
+
+  saveState();
+  render();
+}
+
+function syncDashboardToTimeline() {
+  const metricsSelect = document.getElementById('metricsTimeframe');
+  const timelineSelect = document.getElementById('timelineTimeframe');
+  const timelineCustomRange = document.getElementById('timelineCustomDateRange');
+
+  // Copy dashboard settings to timeline
+  timelineSelect.value = metricsSelect.value;
+
+  if (metricsSelect.value === 'custom') {
+    timelineCustomRange.style.display = 'flex';
+    document.getElementById('timelineStartDate').value = state.metricsCustomStart;
+    document.getElementById('timelineEndDate').value = state.metricsCustomEnd;
+    state.timelineCustomStart = state.metricsCustomStart;
+    state.timelineCustomEnd = state.metricsCustomEnd;
+  } else {
+    timelineCustomRange.style.display = 'none';
+    state.timelineCustomStart = null;
+    state.timelineCustomEnd = null;
+  }
+
+  state.timeRange = state.metricsTimeframe;
+}
+
+function syncTimelineToDashboard() {
+  const metricsSelect = document.getElementById('metricsTimeframe');
+  const timelineSelect = document.getElementById('timelineTimeframe');
+  const customRange = document.getElementById('customDateRange');
+
+  // Copy timeline settings to dashboard
+  metricsSelect.value = timelineSelect.value;
+
+  if (timelineSelect.value === 'custom') {
+    customRange.style.display = 'flex';
+    document.getElementById('metricsStartDate').value = state.timelineCustomStart;
+    document.getElementById('metricsEndDate').value = state.timelineCustomEnd;
+    state.metricsCustomStart = state.timelineCustomStart;
+    state.metricsCustomEnd = state.timelineCustomEnd;
+  } else {
+    customRange.style.display = 'none';
+    state.metricsCustomStart = null;
+    state.metricsCustomEnd = null;
+  }
+
+  state.metricsTimeframe = state.timeRange;
 }
 
 function setTableView(view) {
@@ -1295,7 +1422,28 @@ function confirmClearAll() {
     'Start fresh?',
     'This will remove all your data and reset the app. Make sure to export first if you want to keep anything!',
     () => {
-      localStorage.removeItem('cashFlowPlannerState');
+      // Create a completely empty state (no sample data)
+      const emptyState = {
+        currentCash: 0,
+        locLimit: 0,
+        locBalance: 0,
+        timeRange: 30,
+        timelineCustomStart: null,
+        timelineCustomEnd: null,
+        metricsTimeframe: 90,
+        metricsCustomStart: null,
+        metricsCustomEnd: null,
+        syncFilters: false,
+        tableView: 'monthly',
+        timelineItemsPerPage: 50,
+        timelineCurrentPage: 1,
+        entriesItemsPerPage: 50,
+        entriesCurrentPage: 1,
+        entries: []
+      };
+
+      // Save empty state so it persists after reload
+      localStorage.setItem('cashFlowPlannerState', JSON.stringify(emptyState));
       localStorage.removeItem('cashFlowSetupComplete');
       hideConfirmModal();
       location.reload();
