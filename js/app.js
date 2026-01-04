@@ -882,10 +882,10 @@ function renderEntries() {
         <div class="entry-amount ${amountClass}" style="${amountStyle}">
           ${amountPrefix}${formatCurrency(entry.amount)}
         </div>
-        <div style="text-align: right;">
-          <button class="btn btn-secondary btn-sm" onclick="duplicateEntry(${entry.id})" style="margin-right: 4px;" title="Duplicate">Copy</button>
-          <button class="btn btn-secondary btn-sm" onclick="editEntry(${entry.id})" style="margin-right: 4px;">Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="confirmSingleDelete(${entry.id})">Delete</button>
+        <div class="action-buttons">
+          <button class="btn-action btn-action-secondary" onclick="duplicateEntry(${entry.id})" title="Duplicate">Copy</button>
+          <button class="btn-action btn-action-secondary" onclick="editEntry(${entry.id})">Edit</button>
+          <button class="btn-action btn-action-danger" onclick="confirmSingleDelete(${entry.id})">Delete</button>
         </div>
       </div>
     `;
