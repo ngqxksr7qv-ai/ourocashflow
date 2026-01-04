@@ -378,8 +378,49 @@ body {
 }
 
 .btn-sm {
-  padding: 8px 14px;
-  font-size: 13px;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* Action buttons group - compact inline style */
+.action-buttons {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.btn-action {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.btn-action-secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border-light);
+}
+
+.btn-action-secondary:hover {
+  background: var(--bg-warm);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.btn-action-danger {
+  background: transparent;
+  color: var(--accent-coral);
+  border-color: var(--accent-coral);
+}
+
+.btn-action-danger:hover {
+  background: var(--accent-coral-light);
 }
 
 .btn-danger {
@@ -694,7 +735,7 @@ body {
 /* Entries */
 .entry-header {
   display: grid;
-  grid-template-columns: 40px 90px 1fr 90px 90px 100px 190px;
+  grid-template-columns: 40px 90px 1fr 90px 90px 100px 150px;
   align-items: center;
   padding: 10px 16px;
   gap: 12px;
@@ -709,7 +750,7 @@ body {
 
 .entry-row {
   display: grid;
-  grid-template-columns: 40px 90px 1fr 90px 90px 100px 190px;
+  grid-template-columns: 40px 90px 1fr 90px 90px 100px 150px;
   align-items: center;
   padding: 14px 16px;
   border-radius: var(--radius-sm);
@@ -898,9 +939,11 @@ body {
   letter-spacing: 0.5px;
   font-weight: 600;
   border-bottom: 1px solid var(--border-light);
-  margin-bottom: 8px;
   background: var(--bg-warm);
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 /* Forecast Row */
