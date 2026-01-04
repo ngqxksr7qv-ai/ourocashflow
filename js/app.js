@@ -540,6 +540,16 @@ function renderForecast(forecast) {
   const endIndex = startIndex + itemsPerPage;
   const paginatedDays = daysWithEntries.slice(startIndex, endIndex);
 
+  // Column headers
+  const headerHtml = `
+    <div class="forecast-header">
+      <div>Date</div>
+      <div>Transactions</div>
+      <div style="text-align: right;">Cash In/Out</div>
+      <div style="text-align: right;">Projected Balance</div>
+    </div>
+  `;
+
   const html = paginatedDays.map(day => {
     const entriesHtml = day.entries.map(entry => {
       let colorClass = '';
@@ -580,7 +590,11 @@ function renderForecast(forecast) {
       </div>
     `;
   }).join('');
-  document.getElementById('forecastList').innerHTML = html || '<p style="color: var(--text-muted); padding: 24px; text-align: center;">No transactions in this period</p>';
+
+  const forecastContent = paginatedDays.length > 0
+    ? headerHtml + html
+    : '<p style="color: var(--text-muted); padding: 24px; text-align: center;">No transactions in this period</p>';
+  document.getElementById('forecastList').innerHTML = forecastContent;
 
   // Update pagination info and buttons
   updateTimelinePagination(totalItems, currentPage, totalPages);
@@ -869,6 +883,7 @@ function renderEntries() {
           ${amountPrefix}${formatCurrency(entry.amount)}
         </div>
         <div style="text-align: right;">
+          <button class="btn btn-secondary btn-sm" onclick="duplicateEntry(${entry.id})" style="margin-right: 4px;" title="Duplicate">Copy</button>
           <button class="btn btn-secondary btn-sm" onclick="editEntry(${entry.id})" style="margin-right: 4px;">Edit</button>
           <button class="btn btn-danger btn-sm" onclick="confirmSingleDelete(${entry.id})">Delete</button>
         </div>
@@ -1296,6 +1311,22 @@ function toggleEndConditionInputs() {
 function deleteEntry(id) {
   state.entries = state.entries.filter(e => e.id !== id);
   selectedEntries.delete(id);
+  saveState();
+  render();
+}
+
+function duplicateEntry(id) {
+  const entry = state.entries.find(e => e.id === id);
+  if (!entry) return;
+
+  // Create a copy with a new ID and "(Copy)" suffix
+  const newEntry = {
+    ...entry,
+    id: Date.now(),
+    description: entry.description + ' (Copy)'
+  };
+
+  state.entries.push(newEntry);
   saveState();
   render();
 }
