@@ -1065,7 +1065,13 @@ function renderTableView() {
 }
 
 function renderEntries() {
-  const sortedEntries = [...state.entries].sort((a, b) => new Date(a.date) - new Date(b.date));
+  // Set display mode dropdown value
+  const displayModeSelect = document.getElementById('entryDisplayMode');
+  if (displayModeSelect) {
+    displayModeSelect.value = state.entryDisplayMode || 'grouped';
+  }
+
+  const sortedEntryData = getSortedEntriesForDisplay();
 
   const existingIds = new Set(state.entries.map(e => e.id));
   selectedEntries = new Set([...selectedEntries].filter(id => existingIds.has(id)));
@@ -1073,12 +1079,13 @@ function renderEntries() {
   // Pagination
   const itemsPerPage = state.entriesItemsPerPage;
   const currentPage = state.entriesCurrentPage;
-  const totalItems = sortedEntries.length;
+  const totalItems = sortedEntryData.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedEntries = sortedEntries.slice(startIndex, endIndex);
+  const paginatedEntryData = sortedEntryData.slice(startIndex, endIndex);
 
+  const paginatedEntries = paginatedEntryData.map(d => d.entry);
   const allSelected = paginatedEntries.length > 0 && paginatedEntries.every(e => selectedEntries.has(e.id));
   const someSelected = selectedEntries.size > 0;
 
@@ -1111,9 +1118,10 @@ function renderEntries() {
     'loc_paydown': 'LOC Paydown'
   };
 
-  const entriesHtml = paginatedEntries.map(entry => {
+  const entriesHtml = paginatedEntryData.map(({ entry, isChild }) => {
     const freqLabel = frequencyLabels[entry.frequency] || entry.frequency;
     const isSelected = selectedEntries.has(entry.id);
+    const childClass = isChild ? 'child-entry' : '';
     let endLabel = '';
     if (entry.frequency !== 'once') {
       if (entry.endDate) {
@@ -1131,6 +1139,8 @@ function renderEntries() {
 
       if (isOrphaned) {
         calcIndicator = `<span class="orphaned-warning" title="Source item missing">⚠ Missing source</span>`;
+      } else if (entry.manualOverride) {
+        calcIndicator = `<span class="calc-indicator" title="${calcDesc}"><span class="calc-indicator-icon">📊</span> ${calcDesc}</span><span class="override-indicator" title="Using manual override">overridden</span>`;
       } else {
         calcIndicator = `<span class="calc-indicator" title="${calcDesc}"><span class="calc-indicator-icon">📊</span> ${calcDesc}</span>`;
       }
@@ -1158,7 +1168,7 @@ function renderEntries() {
     }
 
     return `
-      <div class="entry-row ${isSelected ? 'selected' : ''}">
+      <div class="entry-row ${isSelected ? 'selected' : ''} ${childClass}">
         <div class="checkbox-wrapper">
           <div class="checkbox ${isSelected ? 'checked' : ''}" onclick="toggleEntrySelection(${entry.id})"></div>
         </div>
@@ -1211,6 +1221,88 @@ function updateEntriesItemsPerPage() {
   state.entriesCurrentPage = 1;
   saveState();
   render();
+}
+
+function changeEntryDisplayMode() {
+  state.entryDisplayMode = document.getElementById('entryDisplayMode').value;
+  saveState();
+  renderEntries();
+}
+
+// Sort entries for grouped display - sources first, then their calculated children
+function getSortedEntriesForDisplay() {
+  const entries = [...state.entries];
+
+  if (state.entryDisplayMode === 'grouped') {
+    // Build a map of source -> calculated entries
+    const sourceToCalc = new Map();
+    const nonCalcEntries = [];
+    const calcEntries = [];
+
+    entries.forEach(entry => {
+      if (hasCalculationConfig(entry)) {
+        calcEntries.push(entry);
+      } else {
+        nonCalcEntries.push(entry);
+      }
+    });
+
+    // Sort non-calculated entries by date
+    nonCalcEntries.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Group calculated entries by their sources
+    calcEntries.forEach(calc => {
+      const sourceIds = calc.sourceEntryIds || [];
+      if (sourceIds.length > 0) {
+        const primarySourceId = sourceIds[0]; // Use first source as primary
+        if (!sourceToCalc.has(primarySourceId)) {
+          sourceToCalc.set(primarySourceId, []);
+        }
+        sourceToCalc.get(primarySourceId).push(calc);
+      } else if (calc.sourceMode === 'all_of_type') {
+        // For all_of_type, group under first matching entry
+        const matchingSource = nonCalcEntries.find(e => e.type === calc.sourceType);
+        if (matchingSource) {
+          if (!sourceToCalc.has(matchingSource.id)) {
+            sourceToCalc.set(matchingSource.id, []);
+          }
+          sourceToCalc.get(matchingSource.id).push(calc);
+        } else {
+          nonCalcEntries.push(calc); // No source, add to end
+        }
+      }
+    });
+
+    // Build final sorted list with children after parents
+    const result = [];
+    const addedCalcIds = new Set();
+
+    nonCalcEntries.forEach(entry => {
+      result.push({ entry, isChild: false });
+
+      // Add any calculated entries that depend on this source
+      const children = sourceToCalc.get(entry.id) || [];
+      children.forEach(child => {
+        if (!addedCalcIds.has(child.id)) {
+          result.push({ entry: child, isChild: true });
+          addedCalcIds.add(child.id);
+        }
+      });
+    });
+
+    // Add any orphaned calculated entries
+    calcEntries.forEach(calc => {
+      if (!addedCalcIds.has(calc.id)) {
+        result.push({ entry: calc, isChild: false });
+      }
+    });
+
+    return result;
+  } else {
+    // Date sorted - simple sort
+    entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+    return entries.map(entry => ({ entry, isChild: false }));
+  }
 }
 
 function renderChecklist(forecast) {
@@ -1732,9 +1824,11 @@ function getCalculationFormData() {
   }
 
   const sourceMode = document.getElementById('sourceMode').value;
+  const useOverride = document.getElementById('useManualOverride').checked;
+  const overrideAmount = parseFloat(document.getElementById('overrideAmount').value) || null;
 
   return {
-    amount: null,
+    amount: useOverride ? overrideAmount : null,
     calculationType: document.getElementById('calcType').value,
     calculationValue: parseFloat(document.getElementById('calcValue').value) || 0,
     sourceMode: sourceMode,
@@ -1745,7 +1839,7 @@ function getCalculationFormData() {
       ? parseInt(document.getElementById('sourcePeriodDays').value) || 30
       : null,
     dateOffset: parseInt(document.getElementById('dateOffset').value) || 0,
-    manualOverride: false
+    manualOverride: useOverride
   };
 }
 
@@ -1776,17 +1870,88 @@ function setCalculationFormData(entry) {
 
     document.getElementById('dateOffset').value = entry.dateOffset || 0;
 
+    // Show override section when editing
+    showOverrideSection(entry);
+
     // Handle manual override
     if (entry.manualOverride && entry.amount !== null) {
-      document.querySelector('input[name="amountType"][value="manual"]').checked = true;
-      toggleAmountType();
-      document.getElementById('newAmount').value = entry.amount;
+      document.getElementById('useManualOverride').checked = true;
+      document.getElementById('overrideAmountGroup').classList.remove('hidden');
+      document.getElementById('overrideAmount').value = entry.amount;
     }
   } else {
     // Set to manual mode
     document.querySelector('input[name="amountType"][value="manual"]').checked = true;
     toggleAmountType();
     document.getElementById('newAmount').value = entry.amount || '';
+    hideOverrideSection();
+  }
+}
+
+function showOverrideSection(entry) {
+  const section = document.getElementById('manualOverrideSection');
+  section.classList.remove('hidden');
+
+  // Calculate and show the preview amount
+  updateCalculatedPreview(entry);
+}
+
+function hideOverrideSection() {
+  const section = document.getElementById('manualOverrideSection');
+  section.classList.add('hidden');
+  document.getElementById('useManualOverride').checked = false;
+  document.getElementById('overrideAmountGroup').classList.add('hidden');
+  document.getElementById('overrideAmount').value = '';
+}
+
+function updateCalculatedPreview(entry) {
+  const preview = document.getElementById('calculatedPreview');
+
+  if (!entry || !hasCalculationConfig(entry)) {
+    preview.textContent = '';
+    return;
+  }
+
+  // Get source amounts to calculate what the value would be
+  const sources = getSourceEntries(entry);
+  if (sources.length === 0) {
+    preview.textContent = '(no source data)';
+    return;
+  }
+
+  // Calculate based on sources' amounts
+  const totalSourceAmount = sources.reduce((sum, s) => sum + (s.amount || 0), 0);
+
+  let calculatedAmount = 0;
+  if (entry.calculationType === 'percentage') {
+    calculatedAmount = Math.round(totalSourceAmount * (entry.calculationValue / 100) * 100) / 100;
+  } else if (entry.calculationType === 'fixed') {
+    calculatedAmount = entry.calculationValue;
+  }
+
+  if (entry.manualOverride) {
+    preview.innerHTML = `Calculated would be: <strong>${formatCurrency(calculatedAmount)}</strong>`;
+  } else {
+    preview.innerHTML = `Calculates to: <strong>${formatCurrency(calculatedAmount)}</strong> per occurrence`;
+  }
+}
+
+function toggleManualOverride() {
+  const isOverride = document.getElementById('useManualOverride').checked;
+  const overrideGroup = document.getElementById('overrideAmountGroup');
+
+  if (isOverride) {
+    overrideGroup.classList.remove('hidden');
+    // Pre-fill with the calculated amount if available
+    const preview = document.getElementById('calculatedPreview');
+    const match = preview.textContent.match(/\$[\d,]+/);
+    if (match) {
+      const amount = parseFloat(match[0].replace(/[$,]/g, ''));
+      document.getElementById('overrideAmount').value = amount || '';
+    }
+  } else {
+    overrideGroup.classList.add('hidden');
+    document.getElementById('overrideAmount').value = '';
   }
 }
 
@@ -1803,6 +1968,7 @@ function resetCalculationForm() {
   selectedSourceIds.clear();
   toggleSourceMode();
   toggleSourcePeriod();
+  hideOverrideSection();
 }
 
 function deleteEntry(id) {

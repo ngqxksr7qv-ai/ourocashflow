@@ -197,8 +197,17 @@
     <!-- Entries Tab -->
     <div id="entriesTab" class="card hidden">
       <div class="card-title">
-        Projection Items
-        <button class="btn btn-primary" onclick="toggleAddForm()">+ Add New</button>
+        <span>Projection Items</span>
+        <div class="title-actions">
+          <div class="entry-display-toggle">
+            <label>Display:</label>
+            <select id="entryDisplayMode" onchange="changeEntryDisplayMode()">
+              <option value="grouped">Grouped with source</option>
+              <option value="date_sorted">Sort by date</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="toggleAddForm()">+ Add New</button>
+        </div>
       </div>
 
       <div id="addForm" class="add-form hidden">
@@ -299,6 +308,22 @@
                 <option value="selected">Specific items</option>
                 <option value="all_of_type">All items of type</option>
               </select>
+            </div>
+          </div>
+
+          <!-- Manual Override Section (shown when editing a calculated entry) -->
+          <div id="manualOverrideSection" class="manual-override-section hidden">
+            <div class="override-divider"></div>
+            <div class="override-header">
+              <label class="override-checkbox-label">
+                <input type="checkbox" id="useManualOverride" onchange="toggleManualOverride()">
+                <span>Override with manual amount</span>
+              </label>
+              <span id="calculatedPreview" class="calculated-preview"></span>
+            </div>
+            <div id="overrideAmountGroup" class="input-group hidden">
+              <label>Override Amount</label>
+              <input type="number" class="input" id="overrideAmount" placeholder="0" style="font-family: 'IBM Plex Mono', monospace;">
             </div>
           </div>
 
