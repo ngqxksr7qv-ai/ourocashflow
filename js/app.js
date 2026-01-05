@@ -404,9 +404,157 @@ function getSourceOccurrencesForDate(calcEntry, baseExpanded, targetDate, startD
   );
 }
 
+// Expand LOC interest entries (balance_percentage type)
+function expandLOCInterestEntry(calcEntry, baseExpanded, startDate, endDate) {
+  const expanded = [];
+
+  if (calcEntry.manualOverride && calcEntry.amount !== null) {
+    // If manually overridden, create a single entry on the start date
+    expanded.push({
+      ...calcEntry,
+      date: startDate.toISOString().split('T')[0],
+      originalId: calcEntry.id,
+      id: calcEntry.id + '-' + startDate.toISOString().split('T')[0]
+    });
+    return expanded;
+  }
+
+  const period = calcEntry.sourcePeriod || 'same_month';
+  const periodTiming = calcEntry.periodTiming || 'end';
+  const locBalanceType = calcEntry.locBalanceType || 'average';
+  const apr = calcEntry.calculationValue || 0;
+
+  // Calculate LOC balance changes from base expanded entries
+  function getLOCBalanceAtDate(targetDate, baseExpanded) {
+    let balance = state.locBalance;
+    const targetStr = targetDate.toISOString().split('T')[0];
+
+    baseExpanded.forEach(entry => {
+      if (entry.date <= targetStr) {
+        if (entry.type === 'loc_draw') {
+          balance += entry.amount;
+        } else if (entry.type === 'loc_paydown') {
+          balance -= entry.amount;
+        }
+      }
+    });
+
+    return Math.max(0, balance); // No negative interest
+  }
+
+  // Get period boundaries within the forecast range
+  const periods = [];
+  let current = new Date(startDate);
+
+  if (period === 'same_month') {
+    // Move to first day of month
+    current.setDate(1);
+    while (current <= endDate) {
+      const monthStart = new Date(current);
+      const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0);
+
+      if (monthEnd >= startDate && monthStart <= endDate) {
+        const entryDate = periodTiming === 'end' ? monthEnd : monthStart;
+        if (entryDate >= startDate && entryDate <= endDate) {
+          periods.push({
+            start: monthStart,
+            end: monthEnd,
+            entryDate: entryDate,
+            daysInPeriod: monthEnd.getDate()
+          });
+        }
+      }
+      current.setMonth(current.getMonth() + 1);
+    }
+  } else if (period === 'same_week') {
+    // Move to Sunday
+    current.setDate(current.getDate() - current.getDay());
+    while (current <= endDate) {
+      const weekStart = new Date(current);
+      const weekEnd = new Date(current);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+
+      if (weekEnd >= startDate && weekStart <= endDate) {
+        const entryDate = periodTiming === 'end' ? weekEnd : weekStart;
+        if (entryDate >= startDate && entryDate <= endDate) {
+          periods.push({
+            start: weekStart,
+            end: weekEnd,
+            entryDate: entryDate,
+            daysInPeriod: 7
+          });
+        }
+      }
+      current.setDate(current.getDate() + 7);
+    }
+  }
+
+  // Calculate interest for each period
+  periods.forEach(p => {
+    let periodBalance;
+
+    if (locBalanceType === 'average') {
+      // Calculate average daily balance for the period
+      let totalBalance = 0;
+      let daysCounted = 0;
+      const checkDate = new Date(p.start);
+
+      while (checkDate <= p.end && checkDate <= endDate) {
+        if (checkDate >= startDate) {
+          totalBalance += getLOCBalanceAtDate(checkDate, baseExpanded);
+          daysCounted++;
+        }
+        checkDate.setDate(checkDate.getDate() + 1);
+      }
+
+      periodBalance = daysCounted > 0 ? totalBalance / daysCounted : 0;
+    } else {
+      // Use balance at end of period
+      periodBalance = getLOCBalanceAtDate(p.end, baseExpanded);
+    }
+
+    // No interest if balance is zero or negative
+    if (periodBalance <= 0) return;
+
+    // Convert APR to period rate
+    let periodRate;
+    if (period === 'same_month') {
+      periodRate = apr / 12 / 100; // Monthly rate
+    } else if (period === 'same_week') {
+      periodRate = apr / 52 / 100; // Weekly rate
+    } else {
+      periodRate = apr / 365 / 100 * p.daysInPeriod; // Daily rate * days
+    }
+
+    const interestAmount = Math.round(periodBalance * periodRate * 100) / 100;
+
+    if (interestAmount > 0) {
+      const dateStr = p.entryDate.toISOString().split('T')[0];
+      expanded.push({
+        ...calcEntry,
+        date: dateStr,
+        amount: interestAmount,
+        originalId: calcEntry.id,
+        id: calcEntry.id + '-' + dateStr,
+        calculatedFrom: ['loc_balance'],
+        sourceAmount: periodBalance,
+        periodRate: periodRate,
+        apr: apr
+      });
+    }
+  });
+
+  return expanded;
+}
+
 // Expand calculated entries based on their source occurrences
 function expandCalculatedEntry(calcEntry, baseExpanded, startDate, endDate) {
   const expanded = [];
+
+  // Handle LOC interest separately
+  if (calcEntry.calculationType === 'balance_percentage') {
+    return expandLOCInterestEntry(calcEntry, baseExpanded, startDate, endDate);
+  }
 
   // Skip if entry has orphaned sources or validation errors
   if (hasOrphanedSources(calcEntry)) return expanded;
@@ -1731,9 +1879,75 @@ function toggleAmountType() {
     manualGroup.classList.add('hidden');
     calcSettings.classList.remove('hidden');
     populateSourceItemsList();
+    toggleCalcType(); // Initialize calc type visibility
   } else {
     manualGroup.classList.remove('hidden');
     calcSettings.classList.add('hidden');
+  }
+}
+
+function toggleCalcType() {
+  const calcType = document.getElementById('calcType').value;
+  const sourceModeGroup = document.getElementById('sourceModeGroup');
+  const sourceSelectionGroup = document.getElementById('sourceSelectionGroup');
+  const sourceTypeGroup = document.getElementById('sourceTypeGroup');
+  const locInterestSettings = document.getElementById('locInterestSettings');
+  const sourcePeriodRow = document.getElementById('sourcePeriod').closest('.form-grid');
+  const calcTypeHelp = document.getElementById('calcTypeHelp');
+
+  if (calcType === 'balance_percentage') {
+    // Hide source-based settings, show LOC interest settings
+    sourceModeGroup.classList.add('hidden');
+    sourceSelectionGroup.classList.add('hidden');
+    sourceTypeGroup.classList.add('hidden');
+    locInterestSettings.classList.remove('hidden');
+
+    // Update placeholder for APR
+    document.getElementById('calcValue').placeholder = '8.0';
+
+    // Update help text
+    if (calcTypeHelp) {
+      calcTypeHelp.textContent = 'Enter the annual percentage rate (APR). Interest will be calculated based on your LOC balance.';
+    }
+
+    // For LOC interest, show only monthly/weekly time period options
+    const sourcePeriod = document.getElementById('sourcePeriod');
+    sourcePeriod.innerHTML = `
+      <option value="same_month">Monthly</option>
+      <option value="same_week">Weekly</option>
+    `;
+    toggleSourcePeriod();
+  } else {
+    // Show source-based settings, hide LOC interest settings
+    sourceModeGroup.classList.remove('hidden');
+    locInterestSettings.classList.add('hidden');
+    toggleSourceMode(); // Restore proper source mode visibility
+
+    // Update placeholder
+    document.getElementById('calcValue').placeholder = calcType === 'fixed' ? '0.30' : '2.9';
+
+    // Update help text
+    if (calcTypeHelp) {
+      if (calcType === 'percentage') {
+        calcTypeHelp.textContent = '';
+      } else if (calcType === 'fixed') {
+        calcTypeHelp.textContent = 'Fixed amount charged for each occurrence of the source item(s).';
+      }
+    }
+
+    // Restore all time period options
+    const sourcePeriod = document.getElementById('sourcePeriod');
+    const currentValue = sourcePeriod.value;
+    sourcePeriod.innerHTML = `
+      <option value="same_day">Same day</option>
+      <option value="same_week">Same week</option>
+      <option value="same_month">Same month</option>
+      <option value="rolling_days">Rolling days</option>
+    `;
+    if (['same_day', 'same_week', 'same_month', 'rolling_days'].includes(currentValue)) {
+      sourcePeriod.value = currentValue;
+    }
+    toggleSourcePeriod();
   }
 }
 
@@ -1837,21 +2051,22 @@ function getCalculationFormData() {
       sourcePeriod: null,
       sourcePeriodDays: null,
       dateOffset: 0,
-      manualOverride: false
+      manualOverride: false,
+      locBalanceType: null,
+      periodTiming: null
     };
   }
 
+  const calcType = document.getElementById('calcType').value;
   const sourceMode = document.getElementById('sourceMode').value;
   const useOverride = document.getElementById('useManualOverride').checked;
   const overrideAmount = parseFloat(document.getElementById('overrideAmount').value) || null;
 
-  return {
+  // Base fields for all calculation types
+  const data = {
     amount: useOverride ? overrideAmount : null,
-    calculationType: document.getElementById('calcType').value,
+    calculationType: calcType,
     calculationValue: parseFloat(document.getElementById('calcValue').value) || 0,
-    sourceMode: sourceMode,
-    sourceEntryIds: sourceMode === 'selected' ? Array.from(selectedSourceIds) : [],
-    sourceType: sourceMode === 'all_of_type' ? document.getElementById('sourceType').value : null,
     sourcePeriod: document.getElementById('sourcePeriod').value,
     sourcePeriodDays: document.getElementById('sourcePeriod').value === 'rolling_days'
       ? parseInt(document.getElementById('sourcePeriodDays').value) || 30
@@ -1859,6 +2074,24 @@ function getCalculationFormData() {
     dateOffset: parseInt(document.getElementById('dateOffset').value) || 0,
     manualOverride: useOverride
   };
+
+  // LOC balance percentage specific fields
+  if (calcType === 'balance_percentage') {
+    data.sourceMode = null;
+    data.sourceEntryIds = [];
+    data.sourceType = null;
+    data.locBalanceType = document.getElementById('locBalanceType').value;
+    data.periodTiming = document.getElementById('periodTiming').value;
+  } else {
+    // Source-based calculation fields
+    data.sourceMode = sourceMode;
+    data.sourceEntryIds = sourceMode === 'selected' ? Array.from(selectedSourceIds) : [];
+    data.sourceType = sourceMode === 'all_of_type' ? document.getElementById('sourceType').value : null;
+    data.locBalanceType = null;
+    data.periodTiming = null;
+  }
+
+  return data;
 }
 
 function setCalculationFormData(entry) {
@@ -1868,15 +2101,25 @@ function setCalculationFormData(entry) {
     toggleAmountType();
 
     document.getElementById('calcType').value = entry.calculationType || 'percentage';
-    document.getElementById('calcValue').value = entry.calculationValue || '';
-    document.getElementById('sourceMode').value = entry.sourceMode || 'selected';
-    toggleSourceMode();
+    toggleCalcType(); // Set up visibility based on calc type
 
-    if (entry.sourceMode === 'all_of_type') {
-      document.getElementById('sourceType').value = entry.sourceType || 'revenue';
+    document.getElementById('calcValue').value = entry.calculationValue || '';
+
+    // Handle LOC balance percentage type
+    if (entry.calculationType === 'balance_percentage') {
+      document.getElementById('locBalanceType').value = entry.locBalanceType || 'average';
+      document.getElementById('periodTiming').value = entry.periodTiming || 'end';
     } else {
-      selectedSourceIds = new Set(entry.sourceEntryIds || []);
-      populateSourceItemsList();
+      // Handle source-based calculation types
+      document.getElementById('sourceMode').value = entry.sourceMode || 'selected';
+      toggleSourceMode();
+
+      if (entry.sourceMode === 'all_of_type') {
+        document.getElementById('sourceType').value = entry.sourceType || 'revenue';
+      } else {
+        selectedSourceIds = new Set(entry.sourceEntryIds || []);
+        populateSourceItemsList();
+      }
     }
 
     document.getElementById('sourcePeriod').value = entry.sourcePeriod || 'same_day';
@@ -1983,9 +2226,13 @@ function resetCalculationForm() {
   document.getElementById('sourcePeriod').value = 'same_day';
   document.getElementById('sourcePeriodDays').value = '30';
   document.getElementById('dateOffset').value = '0';
+  // Reset LOC interest fields
+  document.getElementById('locBalanceType').value = 'average';
+  document.getElementById('periodTiming').value = 'end';
   selectedSourceIds.clear();
   toggleSourceMode();
   toggleSourcePeriod();
+  toggleCalcType();
   hideOverrideSection();
 }
 

@@ -296,17 +296,37 @@
               <label>Calculate</label>
               <div class="calc-input-row">
                 <input type="number" class="input calc-value-input" id="calcValue" step="0.01" placeholder="2.9">
-                <select class="input" id="calcType">
+                <select class="input" id="calcType" onchange="toggleCalcType()">
                   <option value="percentage">% of amount</option>
                   <option value="fixed">Fixed per occurrence</option>
+                  <option value="balance_percentage">% APR on LOC balance</option>
                 </select>
               </div>
+              <div class="input-help" id="calcTypeHelp"></div>
             </div>
-            <div class="input-group">
+            <div class="input-group" id="sourceModeGroup">
               <label>Based on</label>
               <select class="input" id="sourceMode" onchange="toggleSourceMode()">
                 <option value="selected">Specific items</option>
                 <option value="all_of_type">All items of type</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- LOC Interest Settings (shown when balance_percentage is selected) -->
+          <div id="locInterestSettings" class="loc-interest-settings hidden">
+            <div class="input-group">
+              <label>Calculate interest on</label>
+              <select class="input" id="locBalanceType">
+                <option value="average">Average balance for period</option>
+                <option value="end">Balance at end of period</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label>Charge interest</label>
+              <select class="input" id="periodTiming">
+                <option value="end">At end of period (default)</option>
+                <option value="start">At start of period</option>
               </select>
             </div>
           </div>

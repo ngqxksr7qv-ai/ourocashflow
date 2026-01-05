@@ -1685,3 +1685,20 @@ input[type="file"] {
   line-height: 1.4;
   font-style: italic;
 }
+
+/* LOC Interest Settings */
+.loc-interest-settings {
+  background: var(--accent-amber-light);
+  border: 1px solid var(--accent-amber);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.loc-interest-settings .input-group {
+  margin-bottom: 12px;
+}
+
+.loc-interest-settings .input-group:last-child {
+  margin-bottom: 0;
+}
