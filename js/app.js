@@ -1979,7 +1979,7 @@ function toggleSourcePeriod() {
 
   // Update help text based on selection
   const helpTexts = {
-    'same_day': 'Creates a calculated entry each day the source item(s) occur. Example: Daily CC fees on daily sales.',
+    'same_day': 'Creates a calculated entry each day the source item(s) occur. Example: Daily CC fees on daily sales. To calculate the interest payment on a loan, enter the number of days after loan taken out that the interest is due in the Date offset field.',
     'same_week': 'Sums all source amounts in the same calendar week (Sun-Sat). Example: Weekly processing fee on all week\'s sales.',
     'same_month': 'Sums all source amounts in the same calendar month. Example: Monthly fee based on total monthly revenue.',
     'rolling_days': 'Sums source amounts from the past N days. Example: 30-day rolling average fee.'
