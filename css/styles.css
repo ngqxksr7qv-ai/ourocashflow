@@ -1676,3 +1676,12 @@ input[type="file"] {
   top: 50%;
   transform: translateY(-50%);
 }
+
+/* Input help text */
+.input-help {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  line-height: 1.4;
+  font-style: italic;
+}

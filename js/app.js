@@ -1755,11 +1755,24 @@ function toggleSourceMode() {
 function toggleSourcePeriod() {
   const period = document.getElementById('sourcePeriod').value;
   const rollingGroup = document.getElementById('rollingDaysGroup');
+  const helpText = document.getElementById('sourcePeriodHelp');
 
   if (period === 'rolling_days') {
     rollingGroup.classList.remove('hidden');
   } else {
     rollingGroup.classList.add('hidden');
+  }
+
+  // Update help text based on selection
+  const helpTexts = {
+    'same_day': 'Creates a calculated entry each day the source item(s) occur. Example: Daily CC fees on daily sales.',
+    'same_week': 'Sums all source amounts in the same calendar week (Sun-Sat). Example: Weekly processing fee on all week\'s sales.',
+    'same_month': 'Sums all source amounts in the same calendar month. Example: Monthly fee based on total monthly revenue.',
+    'rolling_days': 'Sums source amounts from the past N days. Example: 30-day rolling average fee.'
+  };
+
+  if (helpText) {
+    helpText.textContent = helpTexts[period] || '';
   }
 }
 
@@ -1781,12 +1794,17 @@ function populateSourceItemsList() {
 
   const html = availableSources.map(entry => {
     const isSelected = selectedSourceIds.has(entry.id);
+    const freqLabel = frequencyLabels[entry.frequency] || entry.frequency;
+    const dateLabel = entry.frequency === 'once'
+      ? formatDate(entry.date)
+      : `starts ${formatDate(entry.date)}`;
+
     return `
       <div class="source-item ${isSelected ? 'selected' : ''}" onclick="toggleSourceItem(${entry.id})">
         <div class="source-item-checkbox"></div>
         <div class="source-item-info">
           <div class="source-item-name">${entry.description}</div>
-          <div class="source-item-details">${typeLabels[entry.type] || entry.type} · ${frequencyLabels[entry.frequency] || entry.frequency}</div>
+          <div class="source-item-details">${typeLabels[entry.type] || entry.type} · ${freqLabel} · ${dateLabel}</div>
         </div>
         <div class="source-item-amount">${formatCurrency(entry.amount)}</div>
       </div>
