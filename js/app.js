@@ -1990,12 +1990,27 @@ function toggleSourcePeriod() {
   }
 }
 
-function populateSourceItemsList() {
+function populateSourceItemsList(searchTerm = null) {
   const container = document.getElementById('sourceItemsList');
+  const searchInput = document.getElementById('sourceSearchInput');
   const availableSources = getAvailableSourceEntries(editingEntryId);
+
+  // Use provided searchTerm or get from input
+  const filterTerm = searchTerm !== null ? searchTerm : (searchInput ? searchInput.value : '');
 
   if (availableSources.length === 0) {
     container.innerHTML = '<div class="no-source-items">No items available. Add some regular entries first.</div>';
+    return;
+  }
+
+  // Filter by search term
+  const filteredSources = filterTerm
+    ? availableSources.filter(entry =>
+        entry.description.toLowerCase().includes(filterTerm.toLowerCase()))
+    : availableSources;
+
+  if (filteredSources.length === 0) {
+    container.innerHTML = '<div class="no-source-items">No matching items found.</div>';
     return;
   }
 
@@ -2006,7 +2021,7 @@ function populateSourceItemsList() {
     'loc_paydown': 'LOC Paydown'
   };
 
-  const html = availableSources.map(entry => {
+  const html = filteredSources.map(entry => {
     const isSelected = selectedSourceIds.has(entry.id);
     const freqLabel = frequencyLabels[entry.frequency] || entry.frequency;
     const dateLabel = entry.frequency === 'once'
@@ -2026,6 +2041,11 @@ function populateSourceItemsList() {
   }).join('');
 
   container.innerHTML = html;
+}
+
+function filterSourceItems() {
+  const searchTerm = document.getElementById('sourceSearchInput').value;
+  populateSourceItemsList(searchTerm);
 }
 
 function toggleSourceItem(id) {
@@ -2226,6 +2246,7 @@ function resetCalculationForm() {
   document.getElementById('sourcePeriod').value = 'same_day';
   document.getElementById('sourcePeriodDays').value = '30';
   document.getElementById('dateOffset').value = '0';
+  document.getElementById('sourceSearchInput').value = '';
   // Reset LOC interest fields
   document.getElementById('locBalanceType').value = 'average';
   document.getElementById('periodTiming').value = 'end';
