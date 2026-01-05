@@ -15,6 +15,7 @@ let state = {
   timelineCurrentPage: 1,
   entriesItemsPerPage: 50,
   entriesCurrentPage: 1,
+  entryDisplayMode: 'grouped', // 'grouped' | 'date_sorted'
   entries: [
     { id: 1, date: '2026-01-02', description: 'Daily Sales', type: 'revenue', amount: 1200, frequency: 'daily' },
     { id: 2, date: '2026-01-05', description: 'Inventory Restock', type: 'expense', amount: 8500, frequency: 'once' },
@@ -43,6 +44,124 @@ const frequencyLabels = {
   'semiannual': 'Semiannual',
   'annual': 'Annual'
 };
+
+// ==================== CALCULATED ENTRY HELPERS ====================
+
+// Check if an entry is a calculated entry
+function isCalculatedEntry(entry) {
+  return entry.calculationType && !entry.manualOverride;
+}
+
+// Check if an entry has calculation config (even if overridden)
+function hasCalculationConfig(entry) {
+  return !!entry.calculationType;
+}
+
+// Get source entries for a calculated entry
+function getSourceEntries(entry) {
+  if (!entry.calculationType) return [];
+
+  if (entry.sourceMode === 'all_of_type' && entry.sourceType) {
+    return state.entries.filter(e =>
+      e.type === entry.sourceType && !hasCalculationConfig(e)
+    );
+  }
+
+  if (entry.sourceEntryIds && entry.sourceEntryIds.length > 0) {
+    return state.entries.filter(e => entry.sourceEntryIds.includes(e.id));
+  }
+
+  return [];
+}
+
+// Get entries that can be used as sources (non-calculated entries only)
+function getAvailableSourceEntries(excludeId = null) {
+  return state.entries.filter(e =>
+    !hasCalculationConfig(e) && e.id !== excludeId
+  );
+}
+
+// Validate a calculated entry's source references
+function validateCalculatedEntry(entry) {
+  const errors = [];
+
+  if (!entry.calculationType) return errors;
+
+  // Must have source configuration
+  if (entry.sourceMode === 'all_of_type') {
+    if (!entry.sourceType) {
+      errors.push('Please select a type to calculate from');
+    }
+  } else {
+    if (!entry.sourceEntryIds || entry.sourceEntryIds.length === 0) {
+      errors.push('Please select at least one source item');
+    } else {
+      // Check if all sources still exist
+      const sourceEntries = getSourceEntries(entry);
+      if (sourceEntries.length === 0) {
+        errors.push('Source item(s) no longer exist');
+      } else if (sourceEntries.length < entry.sourceEntryIds.length) {
+        errors.push('Some source items no longer exist');
+      }
+
+      // Check for calculated sources (not allowed)
+      const calculatedSources = sourceEntries.filter(e => hasCalculationConfig(e));
+      if (calculatedSources.length > 0) {
+        errors.push('Cannot calculate from another calculated item');
+      }
+    }
+  }
+
+  // Must have calculation value
+  if (!entry.calculationValue || entry.calculationValue <= 0) {
+    errors.push('Please enter a valid calculation value');
+  }
+
+  return errors;
+}
+
+// Check if an entry has orphaned source references
+function hasOrphanedSources(entry) {
+  if (!entry.calculationType || entry.sourceMode === 'all_of_type') return false;
+  if (!entry.sourceEntryIds || entry.sourceEntryIds.length === 0) return true;
+
+  const existingIds = new Set(state.entries.map(e => e.id));
+  return entry.sourceEntryIds.some(id => !existingIds.has(id));
+}
+
+// Get description of calculation for display
+function getCalculationDescription(entry) {
+  if (!entry.calculationType) return '';
+
+  const sources = getSourceEntries(entry);
+  let sourceDesc = '';
+
+  if (entry.sourceMode === 'all_of_type') {
+    const typeLabels = {
+      'revenue': 'all income',
+      'expense': 'all expenses',
+      'loc_draw': 'all LOC draws',
+      'loc_paydown': 'all LOC paydowns'
+    };
+    sourceDesc = typeLabels[entry.sourceType] || entry.sourceType;
+  } else if (sources.length === 1) {
+    sourceDesc = `"${sources[0].description}"`;
+  } else if (sources.length > 1) {
+    sourceDesc = `${sources.length} items`;
+  } else {
+    sourceDesc = 'missing source';
+  }
+
+  if (entry.calculationType === 'percentage') {
+    return `${entry.calculationValue}% of ${sourceDesc}`;
+  } else if (entry.calculationType === 'fixed') {
+    return `${formatCurrency(entry.calculationValue)} per occurrence of ${sourceDesc}`;
+  } else if (entry.calculationType === 'balance_percentage') {
+    return `${entry.calculationValue}% APR on LOC balance`;
+  }
+
+  return '';
+}
 
 // ==================== PERSISTENCE ====================
 function saveState() {
@@ -183,8 +302,170 @@ function getNextOccurrence(currentDate, frequency) {
   return next;
 }
 
-function expandEntries(entries, daysToForecast = 30, customStartDate = null, customEndDate = null) {
+// Expand a single non-calculated entry into its occurrences
+function expandSingleEntry(entry, startDate, endDate) {
   const expanded = [];
+
+  if (entry.frequency === 'once') {
+    const entryDate = new Date(entry.date + 'T12:00:00');
+    if (entryDate >= startDate && entryDate <= endDate) {
+      expanded.push({ ...entry, originalId: entry.id });
+    }
+  } else {
+    let currentDate = new Date(entry.date + 'T12:00:00');
+    let occurrenceCount = 0;
+    const maxOccurrences = entry.endOccurrences || Infinity;
+    const endByDate = entry.endDate ? new Date(entry.endDate + 'T12:00:00') : null;
+
+    while (currentDate <= endDate) {
+      if (endByDate && currentDate > endByDate) break;
+      if (occurrenceCount >= maxOccurrences) break;
+
+      if (currentDate >= startDate) {
+        expanded.push({
+          ...entry,
+          date: currentDate.toISOString().split('T')[0],
+          originalId: entry.id,
+          id: entry.id + '-' + currentDate.toISOString()
+        });
+      }
+      occurrenceCount++;
+      const nextDate = getNextOccurrence(currentDate, entry.frequency);
+      if (!nextDate) break;
+      currentDate = nextDate;
+    }
+  }
+
+  return expanded;
+}
+
+// Calculate the amount for a calculated entry based on source occurrences
+function calculateEntryAmount(calcEntry, sourceOccurrences, periodStart, periodEnd) {
+  if (calcEntry.manualOverride && calcEntry.amount !== null) {
+    return calcEntry.amount;
+  }
+
+  if (calcEntry.calculationType === 'percentage') {
+    const total = sourceOccurrences.reduce((sum, occ) => sum + occ.amount, 0);
+    return Math.round(total * (calcEntry.calculationValue / 100) * 100) / 100;
+  } else if (calcEntry.calculationType === 'fixed') {
+    return Math.round(sourceOccurrences.length * calcEntry.calculationValue * 100) / 100;
+  }
+
+  return 0;
+}
+
+// Get source occurrences for a date based on the source period setting
+function getSourceOccurrencesForDate(calcEntry, baseExpanded, targetDate, startDate, endDate) {
+  const sourceEntryIds = calcEntry.sourceMode === 'all_of_type'
+    ? state.entries.filter(e => e.type === calcEntry.sourceType && !hasCalculationConfig(e)).map(e => e.id)
+    : (calcEntry.sourceEntryIds || []);
+
+  const targetDateObj = new Date(targetDate + 'T12:00:00');
+  let periodStart, periodEnd;
+
+  switch (calcEntry.sourcePeriod || 'same_day') {
+    case 'same_day':
+      periodStart = periodEnd = targetDate;
+      break;
+
+    case 'same_week':
+      const weekStart = new Date(targetDateObj);
+      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      periodStart = weekStart.toISOString().split('T')[0];
+      periodEnd = weekEnd.toISOString().split('T')[0];
+      break;
+
+    case 'same_month':
+      const monthStart = new Date(targetDateObj.getFullYear(), targetDateObj.getMonth(), 1);
+      const monthEnd = new Date(targetDateObj.getFullYear(), targetDateObj.getMonth() + 1, 0);
+      periodStart = monthStart.toISOString().split('T')[0];
+      periodEnd = monthEnd.toISOString().split('T')[0];
+      break;
+
+    case 'rolling_days':
+      const days = calcEntry.sourcePeriodDays || 30;
+      const rollStart = new Date(targetDateObj);
+      rollStart.setDate(rollStart.getDate() - days);
+      periodStart = rollStart.toISOString().split('T')[0];
+      periodEnd = targetDate;
+      break;
+
+    default:
+      periodStart = periodEnd = targetDate;
+  }
+
+  return baseExpanded.filter(occ =>
+    sourceEntryIds.includes(occ.originalId) &&
+    occ.date >= periodStart &&
+    occ.date <= periodEnd
+  );
+}
+
+// Expand calculated entries based on their source occurrences
+function expandCalculatedEntry(calcEntry, baseExpanded, startDate, endDate) {
+  const expanded = [];
+
+  // Skip if entry has orphaned sources or validation errors
+  if (hasOrphanedSources(calcEntry)) return expanded;
+  const errors = validateCalculatedEntry(calcEntry);
+  if (errors.length > 0) return expanded;
+
+  // Get all source entry IDs
+  const sourceEntryIds = calcEntry.sourceMode === 'all_of_type'
+    ? state.entries.filter(e => e.type === calcEntry.sourceType && !hasCalculationConfig(e)).map(e => e.id)
+    : (calcEntry.sourceEntryIds || []);
+
+  // Get unique dates from source occurrences
+  const sourceDates = new Set();
+  baseExpanded.forEach(occ => {
+    if (sourceEntryIds.includes(occ.originalId)) {
+      // Apply date offset
+      const offsetDate = new Date(occ.date + 'T12:00:00');
+      offsetDate.setDate(offsetDate.getDate() + (calcEntry.dateOffset || 0));
+      const offsetDateStr = offsetDate.toISOString().split('T')[0];
+
+      // Only include if within forecast range
+      if (offsetDate >= startDate && offsetDate <= endDate) {
+        sourceDates.add(offsetDateStr);
+      }
+    }
+  });
+
+  // For each unique date, create a calculated entry
+  sourceDates.forEach(dateStr => {
+    // Get source date (before offset) for looking up source amounts
+    const calcDate = new Date(dateStr + 'T12:00:00');
+    const sourceDate = new Date(calcDate);
+    sourceDate.setDate(sourceDate.getDate() - (calcEntry.dateOffset || 0));
+    const sourceDateStr = sourceDate.toISOString().split('T')[0];
+
+    // Get source occurrences for this period
+    const sourceOccurrences = getSourceOccurrencesForDate(
+      calcEntry, baseExpanded, sourceDateStr, startDate, endDate
+    );
+
+    if (sourceOccurrences.length === 0) return;
+
+    const amount = calculateEntryAmount(calcEntry, sourceOccurrences, null, null);
+
+    expanded.push({
+      ...calcEntry,
+      date: dateStr,
+      amount: amount,
+      originalId: calcEntry.id,
+      id: calcEntry.id + '-' + dateStr,
+      calculatedFrom: sourceOccurrences.map(o => o.originalId),
+      sourceAmount: sourceOccurrences.reduce((sum, o) => sum + o.amount, 0)
+    });
+  });
+
+  return expanded;
+}
+
+function expandEntries(entries, daysToForecast = 30, customStartDate = null, customEndDate = null) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -201,39 +482,21 @@ function expandEntries(entries, daysToForecast = 30, customStartDate = null, cus
   }
   endDate.setHours(0, 0, 0, 0);
 
-  entries.forEach(entry => {
-    if (entry.frequency === 'once') {
-      const entryDate = new Date(entry.date + 'T12:00:00');
-      if (entryDate >= startDate && entryDate <= endDate) {
-        expanded.push({ ...entry, originalId: entry.id });
-      }
-    } else {
-      let currentDate = new Date(entry.date + 'T12:00:00');
-      let occurrenceCount = 0;
-      const maxOccurrences = entry.endOccurrences || Infinity;
-      const endByDate = entry.endDate ? new Date(entry.endDate + 'T12:00:00') : null;
-
-      while (currentDate <= endDate) {
-        if (endByDate && currentDate > endByDate) break;
-        if (occurrenceCount >= maxOccurrences) break;
-
-        if (currentDate >= startDate) {
-          expanded.push({
-            ...entry,
-            date: currentDate.toISOString().split('T')[0],
-            originalId: entry.id,
-            id: entry.id + '-' + currentDate.toISOString()
-          });
-        }
-        occurrenceCount++;
-        const nextDate = getNextOccurrence(currentDate, entry.frequency);
-        if (!nextDate) break;
-        currentDate = nextDate;
-      }
-    }
+  // PASS 1: Expand all non-calculated entries
+  const baseExpanded = [];
+  entries.filter(e => !isCalculatedEntry(e)).forEach(entry => {
+    baseExpanded.push(...expandSingleEntry(entry, startDate, endDate));
   });
 
-  return expanded.sort((a, b) => new Date(a.date) - new Date(b.date));
+  // PASS 2: Expand calculated entries using base expanded data
+  const calculatedExpanded = [];
+  entries.filter(e => isCalculatedEntry(e)).forEach(entry => {
+    calculatedExpanded.push(...expandCalculatedEntry(entry, baseExpanded, startDate, endDate));
+  });
+
+  // Combine and sort by date
+  const allExpanded = [...baseExpanded, ...calculatedExpanded];
+  return allExpanded.sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
 function calculateForecast(daysToForecast = 30, customStartDate = null, customEndDate = null) {
@@ -555,6 +818,7 @@ function renderForecast(forecast) {
       let colorClass = '';
       let prefix = '';
       let label = entry.description;
+      let calcContext = '';
 
       if (entry.type === 'revenue') {
         colorClass = 'positive';
@@ -572,10 +836,15 @@ function renderForecast(forecast) {
         label = `🏦 ${entry.description}`;
       }
 
+      // Add calculation context for calculated entries
+      if (entry.calculatedFrom && entry.calculationType === 'percentage') {
+        calcContext = ` <span style="font-size: 11px; color: var(--accent-blue);">(${entry.calculationValue}%)</span>`;
+      }
+
       return `
         <span class="forecast-entry ${entry.type}">
           <span class="${colorClass}" style="${entry.type.startsWith('loc') ? 'color: #7c3aed;' : ''}">${prefix}${formatCurrency(entry.amount)}</span>
-          <span style="color: var(--text-secondary);">${label}</span>
+          <span style="color: var(--text-secondary);">${label}${calcContext}</span>
         </span>
       `;
     }).join('');
@@ -854,6 +1123,19 @@ function renderEntries() {
       }
     }
 
+    // Calculation indicator
+    let calcIndicator = '';
+    if (hasCalculationConfig(entry)) {
+      const calcDesc = getCalculationDescription(entry);
+      const isOrphaned = hasOrphanedSources(entry);
+
+      if (isOrphaned) {
+        calcIndicator = `<span class="orphaned-warning" title="Source item missing">⚠ Missing source</span>`;
+      } else {
+        calcIndicator = `<span class="calc-indicator" title="${calcDesc}"><span class="calc-indicator-icon">📊</span> ${calcDesc}</span>`;
+      }
+    }
+
     // Determine amount display style
     let amountClass = '';
     let amountPrefix = '';
@@ -867,6 +1149,14 @@ function renderEntries() {
 
     const amountStyle = entry.type.startsWith('loc') ? 'color: #7c3aed;' : '';
 
+    // For calculated entries, show "(calculated)" if no manual override
+    let amountDisplay = '';
+    if (hasCalculationConfig(entry) && !entry.manualOverride) {
+      amountDisplay = '<span style="font-style: italic; color: var(--text-muted);">(calculated)</span>';
+    } else {
+      amountDisplay = `${amountPrefix}${formatCurrency(entry.amount)}`;
+    }
+
     return `
       <div class="entry-row ${isSelected ? 'selected' : ''}">
         <div class="checkbox-wrapper">
@@ -876,11 +1166,12 @@ function renderEntries() {
         <div class="entry-desc">
           ${entry.type.startsWith('loc') ? '🏦 ' : ''}${entry.description}
           ${endLabel}
+          ${calcIndicator}
         </div>
         <div class="entry-type ${entry.type}">${typeLabels[entry.type]}</div>
         <div style="font-size: 12px; color: var(--text-secondary);">${entry.frequency !== 'once' ? freqLabel : '—'}</div>
         <div class="entry-amount ${amountClass}" style="${amountStyle}">
-          ${amountPrefix}${formatCurrency(entry.amount)}
+          ${amountDisplay}
         </div>
         <div class="action-buttons">
           <button class="btn-action btn-action-secondary" onclick="duplicateEntry(${entry.id})" title="Duplicate">Copy</button>
@@ -1193,6 +1484,7 @@ function resetForm() {
   document.getElementById('cancelEditBtn').classList.add('hidden');
   editingEntryId = null;
   toggleEndCondition();
+  resetCalculationForm();
 }
 
 function editEntry(id) {
@@ -1207,8 +1499,10 @@ function editEntry(id) {
   document.getElementById('newDate').value = entry.date;
   document.getElementById('newDesc').value = entry.description;
   document.getElementById('newType').value = entry.type;
-  document.getElementById('newAmount').value = entry.amount;
   document.getElementById('newRecurring').value = entry.frequency;
+
+  // Set calculation form data (handles amount and calculation settings)
+  setCalculationFormData(entry);
 
   toggleEndCondition();
   if (entry.frequency !== 'once') {
@@ -1242,20 +1536,43 @@ function submitEntry() {
   const date = document.getElementById('newDate').value;
   const desc = document.getElementById('newDesc').value;
   const type = document.getElementById('newType').value;
-  const amount = parseFloat(document.getElementById('newAmount').value);
   const frequency = document.getElementById('newRecurring').value;
 
-  if (!date || !desc || !amount) {
-    alert('Please fill in all required fields');
+  // Get calculation/amount data
+  const calcData = getCalculationFormData();
+
+  // Validate required fields
+  if (!date || !desc) {
+    alert('Please fill in date and description');
     return;
+  }
+
+  // Validate amount for manual entries
+  const isCalculated = document.querySelector('input[name="amountType"]:checked').value === 'calculated';
+  if (!isCalculated && !calcData.amount) {
+    alert('Please enter an amount');
+    return;
+  }
+
+  // Validate calculated entry settings
+  if (isCalculated) {
+    if (!calcData.calculationValue || calcData.calculationValue <= 0) {
+      alert('Please enter a valid calculation percentage or value');
+      return;
+    }
+
+    if (calcData.sourceMode === 'selected' && calcData.sourceEntryIds.length === 0) {
+      alert('Please select at least one source item');
+      return;
+    }
   }
 
   const entryData = {
     date,
     description: desc,
     type,
-    amount,
-    frequency
+    frequency,
+    ...calcData
   };
 
   if (frequency !== 'once') {
@@ -1306,6 +1623,186 @@ function toggleEndConditionInputs() {
   } else if (condType === 'occurrences') {
     document.getElementById('endOccurrencesGroup').classList.remove('hidden');
   }
+}
+
+// ==================== CALCULATION UI FUNCTIONS ====================
+
+// Track selected source IDs for multi-select
+let selectedSourceIds = new Set();
+
+function toggleAmountType() {
+  const isCalculated = document.querySelector('input[name="amountType"]:checked').value === 'calculated';
+  const manualGroup = document.getElementById('manualAmountGroup');
+  const calcSettings = document.getElementById('calculationSettings');
+
+  if (isCalculated) {
+    manualGroup.classList.add('hidden');
+    calcSettings.classList.remove('hidden');
+    populateSourceItemsList();
+  } else {
+    manualGroup.classList.remove('hidden');
+    calcSettings.classList.add('hidden');
+  }
+}
+
+function toggleSourceMode() {
+  const mode = document.getElementById('sourceMode').value;
+  const selectionGroup = document.getElementById('sourceSelectionGroup');
+  const typeGroup = document.getElementById('sourceTypeGroup');
+
+  if (mode === 'all_of_type') {
+    selectionGroup.classList.add('hidden');
+    typeGroup.classList.remove('hidden');
+  } else {
+    selectionGroup.classList.remove('hidden');
+    typeGroup.classList.add('hidden');
+    populateSourceItemsList();
+  }
+}
+
+function toggleSourcePeriod() {
+  const period = document.getElementById('sourcePeriod').value;
+  const rollingGroup = document.getElementById('rollingDaysGroup');
+
+  if (period === 'rolling_days') {
+    rollingGroup.classList.remove('hidden');
+  } else {
+    rollingGroup.classList.add('hidden');
+  }
+}
+
+function populateSourceItemsList() {
+  const container = document.getElementById('sourceItemsList');
+  const availableSources = getAvailableSourceEntries(editingEntryId);
+
+  if (availableSources.length === 0) {
+    container.innerHTML = '<div class="no-source-items">No items available. Add some regular entries first.</div>';
+    return;
+  }
+
+  const typeLabels = {
+    'revenue': 'Income',
+    'expense': 'Expense',
+    'loc_draw': 'LOC Draw',
+    'loc_paydown': 'LOC Paydown'
+  };
+
+  const html = availableSources.map(entry => {
+    const isSelected = selectedSourceIds.has(entry.id);
+    return `
+      <div class="source-item ${isSelected ? 'selected' : ''}" onclick="toggleSourceItem(${entry.id})">
+        <div class="source-item-checkbox"></div>
+        <div class="source-item-info">
+          <div class="source-item-name">${entry.description}</div>
+          <div class="source-item-details">${typeLabels[entry.type] || entry.type} · ${frequencyLabels[entry.frequency] || entry.frequency}</div>
+        </div>
+        <div class="source-item-amount">${formatCurrency(entry.amount)}</div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = html;
+}
+
+function toggleSourceItem(id) {
+  if (selectedSourceIds.has(id)) {
+    selectedSourceIds.delete(id);
+  } else {
+    selectedSourceIds.add(id);
+  }
+  populateSourceItemsList();
+}
+
+function getCalculationFormData() {
+  const isCalculated = document.querySelector('input[name="amountType"]:checked').value === 'calculated';
+
+  if (!isCalculated) {
+    return {
+      amount: parseFloat(document.getElementById('newAmount').value) || 0,
+      calculationType: null,
+      calculationValue: null,
+      sourceMode: null,
+      sourceEntryIds: [],
+      sourceType: null,
+      sourcePeriod: null,
+      sourcePeriodDays: null,
+      dateOffset: 0,
+      manualOverride: false
+    };
+  }
+
+  const sourceMode = document.getElementById('sourceMode').value;
+
+  return {
+    amount: null,
+    calculationType: document.getElementById('calcType').value,
+    calculationValue: parseFloat(document.getElementById('calcValue').value) || 0,
+    sourceMode: sourceMode,
+    sourceEntryIds: sourceMode === 'selected' ? Array.from(selectedSourceIds) : [],
+    sourceType: sourceMode === 'all_of_type' ? document.getElementById('sourceType').value : null,
+    sourcePeriod: document.getElementById('sourcePeriod').value,
+    sourcePeriodDays: document.getElementById('sourcePeriod').value === 'rolling_days'
+      ? parseInt(document.getElementById('sourcePeriodDays').value) || 30
+      : null,
+    dateOffset: parseInt(document.getElementById('dateOffset').value) || 0,
+    manualOverride: false
+  };
+}
+
+function setCalculationFormData(entry) {
+  if (hasCalculationConfig(entry)) {
+    // Set to calculated mode
+    document.querySelector('input[name="amountType"][value="calculated"]').checked = true;
+    toggleAmountType();
+
+    document.getElementById('calcType').value = entry.calculationType || 'percentage';
+    document.getElementById('calcValue').value = entry.calculationValue || '';
+    document.getElementById('sourceMode').value = entry.sourceMode || 'selected';
+    toggleSourceMode();
+
+    if (entry.sourceMode === 'all_of_type') {
+      document.getElementById('sourceType').value = entry.sourceType || 'revenue';
+    } else {
+      selectedSourceIds = new Set(entry.sourceEntryIds || []);
+      populateSourceItemsList();
+    }
+
+    document.getElementById('sourcePeriod').value = entry.sourcePeriod || 'same_day';
+    toggleSourcePeriod();
+
+    if (entry.sourcePeriod === 'rolling_days') {
+      document.getElementById('sourcePeriodDays').value = entry.sourcePeriodDays || 30;
+    }
+
+    document.getElementById('dateOffset').value = entry.dateOffset || 0;
+
+    // Handle manual override
+    if (entry.manualOverride && entry.amount !== null) {
+      document.querySelector('input[name="amountType"][value="manual"]').checked = true;
+      toggleAmountType();
+      document.getElementById('newAmount').value = entry.amount;
+    }
+  } else {
+    // Set to manual mode
+    document.querySelector('input[name="amountType"][value="manual"]').checked = true;
+    toggleAmountType();
+    document.getElementById('newAmount').value = entry.amount || '';
+  }
+}
+
+function resetCalculationForm() {
+  document.querySelector('input[name="amountType"][value="manual"]').checked = true;
+  toggleAmountType();
+  document.getElementById('calcValue').value = '';
+  document.getElementById('calcType').value = 'percentage';
+  document.getElementById('sourceMode').value = 'selected';
+  document.getElementById('sourceType').value = 'revenue';
+  document.getElementById('sourcePeriod').value = 'same_day';
+  document.getElementById('sourcePeriodDays').value = '30';
+  document.getElementById('dateOffset').value = '0';
+  selectedSourceIds.clear();
+  toggleSourceMode();
+  toggleSourcePeriod();
 }
 
 function deleteEntry(id) {

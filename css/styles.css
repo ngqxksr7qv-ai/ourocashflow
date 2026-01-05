@@ -1350,3 +1350,231 @@ input[type="file"] {
     padding: 20px;
   }
 }
+
+/* ==================== CALCULATED ENTRIES ==================== */
+
+/* Amount Type Toggle */
+.amount-type-toggle {
+  display: flex;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.radio-label input[type="radio"] {
+  cursor: pointer;
+  accent-color: var(--accent-blue);
+}
+
+.radio-label span {
+  font-weight: 500;
+}
+
+/* Calculation Settings Panel */
+.calculation-settings {
+  background: var(--accent-blue-light);
+  border: 1px solid var(--accent-blue);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-top: 16px;
+}
+
+.calculation-settings-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-blue);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calculation-settings-title::before {
+  content: "📊";
+}
+
+.calc-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.calc-value-input {
+  width: 80px !important;
+  flex-shrink: 0;
+}
+
+.offset-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Source Items Selection */
+.source-selection-group {
+  margin-top: 16px;
+}
+
+.source-selection-group > label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.source-items-list {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.source-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.source-item:hover {
+  background: var(--bg-warm);
+}
+
+.source-item.selected {
+  background: var(--accent-blue-light);
+}
+
+.source-item-checkbox {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-light);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.source-item.selected .source-item-checkbox {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.source-item.selected .source-item-checkbox::after {
+  content: "✓";
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.source-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.source-item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-item-details {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.source-item-amount {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.no-source-items {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Calculated Entry Indicator in Entry List */
+.calc-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--accent-blue);
+  background: var(--accent-blue-light);
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 8px;
+}
+
+.calc-indicator-icon {
+  font-size: 10px;
+}
+
+/* Orphaned Source Warning */
+.orphaned-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--accent-coral);
+  background: var(--accent-coral-light);
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 8px;
+}
+
+/* Entry row for calculated items - grouped display */
+.entry-row.calculated-child {
+  margin-left: 24px;
+  border-left: 2px solid var(--accent-blue-light);
+  padding-left: 12px;
+}
+
+.entry-row.calculated-child::before {
+  content: "↳";
+  position: absolute;
+  left: -20px;
+  color: var(--accent-blue);
+  font-size: 14px;
+}
+
+/* Display Mode Toggle */
+.entry-display-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.entry-display-toggle select {
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+}

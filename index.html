@@ -226,6 +226,19 @@
           </div>
           <div class="input-group">
             <label>Amount</label>
+            <div class="amount-type-toggle">
+              <label class="radio-label">
+                <input type="radio" name="amountType" value="manual" checked onchange="toggleAmountType()">
+                <span>Manual</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="amountType" value="calculated" onchange="toggleAmountType()">
+                <span>Calculated</span>
+              </label>
+            </div>
+          </div>
+          <div class="input-group" id="manualAmountGroup">
+            <label>Amount</label>
             <input type="number" class="input" id="newAmount" placeholder="0" style="font-family: 'IBM Plex Mono', monospace;">
           </div>
           <div class="input-group">
@@ -263,6 +276,70 @@
           <div class="input-group hidden" id="endOccurrencesGroup" style="min-width: 120px;">
             <label># of Times</label>
             <input type="number" class="input" id="endOccurrences" placeholder="e.g., 12" min="1">
+          </div>
+        </div>
+
+        <!-- Calculation Settings (shown when "Calculated" is selected) -->
+        <div id="calculationSettings" class="calculation-settings hidden">
+          <div class="calculation-settings-title">Calculation Settings</div>
+          <div class="form-grid">
+            <div class="input-group">
+              <label>Calculate</label>
+              <div class="calc-input-row">
+                <input type="number" class="input calc-value-input" id="calcValue" step="0.01" placeholder="2.9">
+                <select class="input" id="calcType">
+                  <option value="percentage">% of amount</option>
+                  <option value="fixed">Fixed per occurrence</option>
+                </select>
+              </div>
+            </div>
+            <div class="input-group">
+              <label>Based on</label>
+              <select class="input" id="sourceMode" onchange="toggleSourceMode()">
+                <option value="selected">Specific items</option>
+                <option value="all_of_type">All items of type</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="sourceSelectionGroup" class="source-selection-group">
+            <label>Select source items</label>
+            <div class="source-items-list" id="sourceItemsList">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <div id="sourceTypeGroup" class="input-group hidden">
+            <label>Item type</label>
+            <select class="input" id="sourceType">
+              <option value="revenue">All Income</option>
+              <option value="expense">All Expenses</option>
+              <option value="loc_draw">All LOC Draws</option>
+              <option value="loc_paydown">All LOC Paydowns</option>
+            </select>
+          </div>
+
+          <div class="form-grid">
+            <div class="input-group">
+              <label>Time period</label>
+              <select class="input" id="sourcePeriod" onchange="toggleSourcePeriod()">
+                <option value="same_day">Same day</option>
+                <option value="same_week">Same week</option>
+                <option value="same_month">Same month</option>
+                <option value="rolling_days">Rolling days</option>
+              </select>
+            </div>
+            <div class="input-group hidden" id="rollingDaysGroup">
+              <label>Look back days</label>
+              <input type="number" class="input" id="sourcePeriodDays" value="30" min="1">
+            </div>
+            <div class="input-group">
+              <label>Date offset</label>
+              <div class="calc-input-row">
+                <input type="number" class="input" id="dateOffset" value="0" min="0" style="width: 80px;">
+                <span class="offset-label">days after source</span>
+              </div>
+            </div>
           </div>
         </div>
 
