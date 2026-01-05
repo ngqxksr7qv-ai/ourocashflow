@@ -15,6 +15,7 @@ let state = {
   timelineCurrentPage: 1,
   entriesItemsPerPage: 50,
   entriesCurrentPage: 1,
+  entryDisplayMode: 'grouped', // 'grouped' | 'date_sorted'
   entries: [
     { id: 1, date: '2026-01-02', description: 'Daily Sales', type: 'revenue', amount: 1200, frequency: 'daily' },
     { id: 2, date: '2026-01-05', description: 'Inventory Restock', type: 'expense', amount: 8500, frequency: 'once' },
@@ -43,6 +44,124 @@ const frequencyLabels = {
   'semiannual': 'Semiannual',
   'annual': 'Annual'
 };
+
+// ==================== CALCULATED ENTRY HELPERS ====================
+
+// Check if an entry is a calculated entry
+function isCalculatedEntry(entry) {
+  return entry.calculationType && !entry.manualOverride;
+}
+
+// Check if an entry has calculation config (even if overridden)
+function hasCalculationConfig(entry) {
+  return !!entry.calculationType;
+}
+
+// Get source entries for a calculated entry
+function getSourceEntries(entry) {
+  if (!entry.calculationType) return [];
+
+  if (entry.sourceMode === 'all_of_type' && entry.sourceType) {
+    return state.entries.filter(e =>
+      e.type === entry.sourceType && !hasCalculationConfig(e)
+    );
+  }
+
+  if (entry.sourceEntryIds && entry.sourceEntryIds.length > 0) {
+    return state.entries.filter(e => entry.sourceEntryIds.includes(e.id));
+  }
+
+  return [];
+}
+
+// Get entries that can be used as sources (non-calculated entries only)
+function getAvailableSourceEntries(excludeId = null) {
+  return state.entries.filter(e =>
+    !hasCalculationConfig(e) && e.id !== excludeId
+  );
+}
+
+// Validate a calculated entry's source references
+function validateCalculatedEntry(entry) {
+  const errors = [];
+
+  if (!entry.calculationType) return errors;
+
+  // Must have source configuration
+  if (entry.sourceMode === 'all_of_type') {
+    if (!entry.sourceType) {
+      errors.push('Please select a type to calculate from');
+    }
+  } else {
+    if (!entry.sourceEntryIds || entry.sourceEntryIds.length === 0) {
+      errors.push('Please select at least one source item');
+    } else {
+      // Check if all sources still exist
+      const sourceEntries = getSourceEntries(entry);
+      if (sourceEntries.length === 0) {
+        errors.push('Source item(s) no longer exist');
+      } else if (sourceEntries.length < entry.sourceEntryIds.length) {
+        errors.push('Some source items no longer exist');
+      }
+
+      // Check for calculated sources (not allowed)
+      const calculatedSources = sourceEntries.filter(e => hasCalculationConfig(e));
+      if (calculatedSources.length > 0) {
+        errors.push('Cannot calculate from another calculated item');
+      }
+    }
+  }
+
+  // Must have calculation value
+  if (!entry.calculationValue || entry.calculationValue <= 0) {
+    errors.push('Please enter a valid calculation value');
+  }
+
+  return errors;
+}
+
+// Check if an entry has orphaned source references
+function hasOrphanedSources(entry) {
+  if (!entry.calculationType || entry.sourceMode === 'all_of_type') return false;
+  if (!entry.sourceEntryIds || entry.sourceEntryIds.length === 0) return true;
+
+  const existingIds = new Set(state.entries.map(e => e.id));
+  return entry.sourceEntryIds.some(id => !existingIds.has(id));
+}
+
+// Get description of calculation for display
+function getCalculationDescription(entry) {
+  if (!entry.calculationType) return '';
+
+  const sources = getSourceEntries(entry);
+  let sourceDesc = '';
+
+  if (entry.sourceMode === 'all_of_type') {
+    const typeLabels = {
+      'revenue': 'all income',
+      'expense': 'all expenses',
+      'loc_draw': 'all LOC draws',
+      'loc_paydown': 'all LOC paydowns'
+    };
+    sourceDesc = typeLabels[entry.sourceType] || entry.sourceType;
+  } else if (sources.length === 1) {
+    sourceDesc = `"${sources[0].description}"`;
+  } else if (sources.length > 1) {
+    sourceDesc = `${sources.length} items`;
+  } else {
+    sourceDesc = 'missing source';
+  }
+
+  if (entry.calculationType === 'percentage') {
+    return `${entry.calculationValue}% of ${sourceDesc}`;
+  } else if (entry.calculationType === 'fixed') {
+    return `${formatCurrency(entry.calculationValue)} per occurrence of ${sourceDesc}`;
+  } else if (entry.calculationType === 'balance_percentage') {
+    return `${entry.calculationValue}% APR on LOC balance`;
+  }
+
+  return '';
+}
 
 // ==================== PERSISTENCE ====================
 function saveState() {
@@ -183,8 +302,318 @@ function getNextOccurrence(currentDate, frequency) {
   return next;
 }
 
-function expandEntries(entries, daysToForecast = 30, customStartDate = null, customEndDate = null) {
+// Expand a single non-calculated entry into its occurrences
+function expandSingleEntry(entry, startDate, endDate) {
   const expanded = [];
+
+  if (entry.frequency === 'once') {
+    const entryDate = new Date(entry.date + 'T12:00:00');
+    if (entryDate >= startDate && entryDate <= endDate) {
+      expanded.push({ ...entry, originalId: entry.id });
+    }
+  } else {
+    let currentDate = new Date(entry.date + 'T12:00:00');
+    let occurrenceCount = 0;
+    const maxOccurrences = entry.endOccurrences || Infinity;
+    const endByDate = entry.endDate ? new Date(entry.endDate + 'T12:00:00') : null;
+
+    while (currentDate <= endDate) {
+      if (endByDate && currentDate > endByDate) break;
+      if (occurrenceCount >= maxOccurrences) break;
+
+      if (currentDate >= startDate) {
+        expanded.push({
+          ...entry,
+          date: currentDate.toISOString().split('T')[0],
+          originalId: entry.id,
+          id: entry.id + '-' + currentDate.toISOString()
+        });
+      }
+      occurrenceCount++;
+      const nextDate = getNextOccurrence(currentDate, entry.frequency);
+      if (!nextDate) break;
+      currentDate = nextDate;
+    }
+  }
+
+  return expanded;
+}
+
+// Calculate the amount for a calculated entry based on source occurrences
+function calculateEntryAmount(calcEntry, sourceOccurrences, periodStart, periodEnd) {
+  if (calcEntry.manualOverride && calcEntry.amount !== null) {
+    return calcEntry.amount;
+  }
+
+  if (calcEntry.calculationType === 'percentage') {
+    const total = sourceOccurrences.reduce((sum, occ) => sum + occ.amount, 0);
+    return Math.round(total * (calcEntry.calculationValue / 100) * 100) / 100;
+  } else if (calcEntry.calculationType === 'fixed') {
+    return Math.round(sourceOccurrences.length * calcEntry.calculationValue * 100) / 100;
+  }
+
+  return 0;
+}
+
+// Get source occurrences for a date based on the source period setting
+function getSourceOccurrencesForDate(calcEntry, baseExpanded, targetDate, startDate, endDate) {
+  const sourceEntryIds = calcEntry.sourceMode === 'all_of_type'
+    ? state.entries.filter(e => e.type === calcEntry.sourceType && !hasCalculationConfig(e)).map(e => e.id)
+    : (calcEntry.sourceEntryIds || []);
+
+  const targetDateObj = new Date(targetDate + 'T12:00:00');
+  let periodStart, periodEnd;
+
+  switch (calcEntry.sourcePeriod || 'same_day') {
+    case 'same_day':
+      periodStart = periodEnd = targetDate;
+      break;
+
+    case 'same_week':
+      const weekStart = new Date(targetDateObj);
+      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      periodStart = weekStart.toISOString().split('T')[0];
+      periodEnd = weekEnd.toISOString().split('T')[0];
+      break;
+
+    case 'same_month':
+      const monthStart = new Date(targetDateObj.getFullYear(), targetDateObj.getMonth(), 1);
+      const monthEnd = new Date(targetDateObj.getFullYear(), targetDateObj.getMonth() + 1, 0);
+      periodStart = monthStart.toISOString().split('T')[0];
+      periodEnd = monthEnd.toISOString().split('T')[0];
+      break;
+
+    case 'rolling_days':
+      const days = calcEntry.sourcePeriodDays || 30;
+      const rollStart = new Date(targetDateObj);
+      rollStart.setDate(rollStart.getDate() - days);
+      periodStart = rollStart.toISOString().split('T')[0];
+      periodEnd = targetDate;
+      break;
+
+    default:
+      periodStart = periodEnd = targetDate;
+  }
+
+  return baseExpanded.filter(occ =>
+    sourceEntryIds.includes(occ.originalId) &&
+    occ.date >= periodStart &&
+    occ.date <= periodEnd
+  );
+}
+
+// Expand LOC interest entries (balance_percentage type)
+function expandLOCInterestEntry(calcEntry, baseExpanded, startDate, endDate) {
+  const expanded = [];
+
+  if (calcEntry.manualOverride && calcEntry.amount !== null) {
+    // If manually overridden, create a single entry on the start date
+    expanded.push({
+      ...calcEntry,
+      date: startDate.toISOString().split('T')[0],
+      originalId: calcEntry.id,
+      id: calcEntry.id + '-' + startDate.toISOString().split('T')[0]
+    });
+    return expanded;
+  }
+
+  const period = calcEntry.sourcePeriod || 'same_month';
+  const periodTiming = calcEntry.periodTiming || 'end';
+  const locBalanceType = calcEntry.locBalanceType || 'average';
+  const apr = calcEntry.calculationValue || 0;
+
+  // Calculate LOC balance changes from base expanded entries
+  function getLOCBalanceAtDate(targetDate, baseExpanded) {
+    let balance = state.locBalance;
+    const targetStr = targetDate.toISOString().split('T')[0];
+
+    baseExpanded.forEach(entry => {
+      if (entry.date <= targetStr) {
+        if (entry.type === 'loc_draw') {
+          balance += entry.amount;
+        } else if (entry.type === 'loc_paydown') {
+          balance -= entry.amount;
+        }
+      }
+    });
+
+    return Math.max(0, balance); // No negative interest
+  }
+
+  // Get period boundaries within the forecast range
+  const periods = [];
+  let current = new Date(startDate);
+
+  if (period === 'same_month') {
+    // Move to first day of month
+    current.setDate(1);
+    while (current <= endDate) {
+      const monthStart = new Date(current);
+      const monthEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0);
+
+      if (monthEnd >= startDate && monthStart <= endDate) {
+        const entryDate = periodTiming === 'end' ? monthEnd : monthStart;
+        if (entryDate >= startDate && entryDate <= endDate) {
+          periods.push({
+            start: monthStart,
+            end: monthEnd,
+            entryDate: entryDate,
+            daysInPeriod: monthEnd.getDate()
+          });
+        }
+      }
+      current.setMonth(current.getMonth() + 1);
+    }
+  } else if (period === 'same_week') {
+    // Move to Sunday
+    current.setDate(current.getDate() - current.getDay());
+    while (current <= endDate) {
+      const weekStart = new Date(current);
+      const weekEnd = new Date(current);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+
+      if (weekEnd >= startDate && weekStart <= endDate) {
+        const entryDate = periodTiming === 'end' ? weekEnd : weekStart;
+        if (entryDate >= startDate && entryDate <= endDate) {
+          periods.push({
+            start: weekStart,
+            end: weekEnd,
+            entryDate: entryDate,
+            daysInPeriod: 7
+          });
+        }
+      }
+      current.setDate(current.getDate() + 7);
+    }
+  }
+
+  // Calculate interest for each period
+  periods.forEach(p => {
+    let periodBalance;
+
+    if (locBalanceType === 'average') {
+      // Calculate average daily balance for the period
+      let totalBalance = 0;
+      let daysCounted = 0;
+      const checkDate = new Date(p.start);
+
+      while (checkDate <= p.end && checkDate <= endDate) {
+        if (checkDate >= startDate) {
+          totalBalance += getLOCBalanceAtDate(checkDate, baseExpanded);
+          daysCounted++;
+        }
+        checkDate.setDate(checkDate.getDate() + 1);
+      }
+
+      periodBalance = daysCounted > 0 ? totalBalance / daysCounted : 0;
+    } else {
+      // Use balance at end of period
+      periodBalance = getLOCBalanceAtDate(p.end, baseExpanded);
+    }
+
+    // No interest if balance is zero or negative
+    if (periodBalance <= 0) return;
+
+    // Convert APR to period rate
+    let periodRate;
+    if (period === 'same_month') {
+      periodRate = apr / 12 / 100; // Monthly rate
+    } else if (period === 'same_week') {
+      periodRate = apr / 52 / 100; // Weekly rate
+    } else {
+      periodRate = apr / 365 / 100 * p.daysInPeriod; // Daily rate * days
+    }
+
+    const interestAmount = Math.round(periodBalance * periodRate * 100) / 100;
+
+    if (interestAmount > 0) {
+      const dateStr = p.entryDate.toISOString().split('T')[0];
+      expanded.push({
+        ...calcEntry,
+        date: dateStr,
+        amount: interestAmount,
+        originalId: calcEntry.id,
+        id: calcEntry.id + '-' + dateStr,
+        calculatedFrom: ['loc_balance'],
+        sourceAmount: periodBalance,
+        periodRate: periodRate,
+        apr: apr
+      });
+    }
+  });
+
+  return expanded;
+}
+
+// Expand calculated entries based on their source occurrences
+function expandCalculatedEntry(calcEntry, baseExpanded, startDate, endDate) {
+  const expanded = [];
+
+  // Handle LOC interest separately
+  if (calcEntry.calculationType === 'balance_percentage') {
+    return expandLOCInterestEntry(calcEntry, baseExpanded, startDate, endDate);
+  }
+
+  // Skip if entry has orphaned sources or validation errors
+  if (hasOrphanedSources(calcEntry)) return expanded;
+  const errors = validateCalculatedEntry(calcEntry);
+  if (errors.length > 0) return expanded;
+
+  // Get all source entry IDs
+  const sourceEntryIds = calcEntry.sourceMode === 'all_of_type'
+    ? state.entries.filter(e => e.type === calcEntry.sourceType && !hasCalculationConfig(e)).map(e => e.id)
+    : (calcEntry.sourceEntryIds || []);
+
+  // Get unique dates from source occurrences
+  const sourceDates = new Set();
+  baseExpanded.forEach(occ => {
+    if (sourceEntryIds.includes(occ.originalId)) {
+      // Apply date offset
+      const offsetDate = new Date(occ.date + 'T12:00:00');
+      offsetDate.setDate(offsetDate.getDate() + (calcEntry.dateOffset || 0));
+      const offsetDateStr = offsetDate.toISOString().split('T')[0];
+
+      // Only include if within forecast range
+      if (offsetDate >= startDate && offsetDate <= endDate) {
+        sourceDates.add(offsetDateStr);
+      }
+    }
+  });
+
+  // For each unique date, create a calculated entry
+  sourceDates.forEach(dateStr => {
+    // Get source date (before offset) for looking up source amounts
+    const calcDate = new Date(dateStr + 'T12:00:00');
+    const sourceDate = new Date(calcDate);
+    sourceDate.setDate(sourceDate.getDate() - (calcEntry.dateOffset || 0));
+    const sourceDateStr = sourceDate.toISOString().split('T')[0];
+
+    // Get source occurrences for this period
+    const sourceOccurrences = getSourceOccurrencesForDate(
+      calcEntry, baseExpanded, sourceDateStr, startDate, endDate
+    );
+
+    if (sourceOccurrences.length === 0) return;
+
+    const amount = calculateEntryAmount(calcEntry, sourceOccurrences, null, null);
+
+    expanded.push({
+      ...calcEntry,
+      date: dateStr,
+      amount: amount,
+      originalId: calcEntry.id,
+      id: calcEntry.id + '-' + dateStr,
+      calculatedFrom: sourceOccurrences.map(o => o.originalId),
+      sourceAmount: sourceOccurrences.reduce((sum, o) => sum + o.amount, 0)
+    });
+  });
+
+  return expanded;
+}
+
+function expandEntries(entries, daysToForecast = 30, customStartDate = null, customEndDate = null) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -201,39 +630,21 @@ function expandEntries(entries, daysToForecast = 30, customStartDate = null, cus
   }
   endDate.setHours(0, 0, 0, 0);
 
-  entries.forEach(entry => {
-    if (entry.frequency === 'once') {
-      const entryDate = new Date(entry.date + 'T12:00:00');
-      if (entryDate >= startDate && entryDate <= endDate) {
-        expanded.push({ ...entry, originalId: entry.id });
-      }
-    } else {
-      let currentDate = new Date(entry.date + 'T12:00:00');
-      let occurrenceCount = 0;
-      const maxOccurrences = entry.endOccurrences || Infinity;
-      const endByDate = entry.endDate ? new Date(entry.endDate + 'T12:00:00') : null;
-
-      while (currentDate <= endDate) {
-        if (endByDate && currentDate > endByDate) break;
-        if (occurrenceCount >= maxOccurrences) break;
-
-        if (currentDate >= startDate) {
-          expanded.push({
-            ...entry,
-            date: currentDate.toISOString().split('T')[0],
-            originalId: entry.id,
-            id: entry.id + '-' + currentDate.toISOString()
-          });
-        }
-        occurrenceCount++;
-        const nextDate = getNextOccurrence(currentDate, entry.frequency);
-        if (!nextDate) break;
-        currentDate = nextDate;
-      }
-    }
+  // PASS 1: Expand all non-calculated entries
+  const baseExpanded = [];
+  entries.filter(e => !isCalculatedEntry(e)).forEach(entry => {
+    baseExpanded.push(...expandSingleEntry(entry, startDate, endDate));
   });
 
-  return expanded.sort((a, b) => new Date(a.date) - new Date(b.date));
+  // PASS 2: Expand calculated entries using base expanded data
+  const calculatedExpanded = [];
+  entries.filter(e => isCalculatedEntry(e)).forEach(entry => {
+    calculatedExpanded.push(...expandCalculatedEntry(entry, baseExpanded, startDate, endDate));
+  });
+
+  // Combine and sort by date
+  const allExpanded = [...baseExpanded, ...calculatedExpanded];
+  return allExpanded.sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
 function calculateForecast(daysToForecast = 30, customStartDate = null, customEndDate = null) {
@@ -555,6 +966,7 @@ function renderForecast(forecast) {
       let colorClass = '';
       let prefix = '';
       let label = entry.description;
+      let calcContext = '';
 
       if (entry.type === 'revenue') {
         colorClass = 'positive';
@@ -572,10 +984,15 @@ function renderForecast(forecast) {
         label = `🏦 ${entry.description}`;
       }
 
+      // Add calculation context for calculated entries
+      if (entry.calculatedFrom && entry.calculationType === 'percentage') {
+        calcContext = ` <span style="font-size: 11px; color: var(--accent-blue);">(${entry.calculationValue}%)</span>`;
+      }
+
       return `
         <span class="forecast-entry ${entry.type}">
           <span class="${colorClass}" style="${entry.type.startsWith('loc') ? 'color: #7c3aed;' : ''}">${prefix}${formatCurrency(entry.amount)}</span>
-          <span style="color: var(--text-secondary);">${label}</span>
+          <span style="color: var(--text-secondary);">${label}${calcContext}</span>
         </span>
       `;
     }).join('');
@@ -796,7 +1213,13 @@ function renderTableView() {
 }
 
 function renderEntries() {
-  const sortedEntries = [...state.entries].sort((a, b) => new Date(a.date) - new Date(b.date));
+  // Set display mode dropdown value
+  const displayModeSelect = document.getElementById('entryDisplayMode');
+  if (displayModeSelect) {
+    displayModeSelect.value = state.entryDisplayMode || 'grouped';
+  }
+
+  const sortedEntryData = getSortedEntriesForDisplay();
 
   const existingIds = new Set(state.entries.map(e => e.id));
   selectedEntries = new Set([...selectedEntries].filter(id => existingIds.has(id)));
@@ -804,12 +1227,13 @@ function renderEntries() {
   // Pagination
   const itemsPerPage = state.entriesItemsPerPage;
   const currentPage = state.entriesCurrentPage;
-  const totalItems = sortedEntries.length;
+  const totalItems = sortedEntryData.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedEntries = sortedEntries.slice(startIndex, endIndex);
+  const paginatedEntryData = sortedEntryData.slice(startIndex, endIndex);
 
+  const paginatedEntries = paginatedEntryData.map(d => d.entry);
   const allSelected = paginatedEntries.length > 0 && paginatedEntries.every(e => selectedEntries.has(e.id));
   const someSelected = selectedEntries.size > 0;
 
@@ -842,15 +1266,31 @@ function renderEntries() {
     'loc_paydown': 'LOC Paydown'
   };
 
-  const entriesHtml = paginatedEntries.map(entry => {
+  const entriesHtml = paginatedEntryData.map(({ entry, isChild }) => {
     const freqLabel = frequencyLabels[entry.frequency] || entry.frequency;
     const isSelected = selectedEntries.has(entry.id);
+    const childClass = isChild ? 'child-entry' : '';
     let endLabel = '';
     if (entry.frequency !== 'once') {
       if (entry.endDate) {
         endLabel = `<span class="entry-badge end-condition">Until ${formatDate(entry.endDate)}</span>`;
       } else if (entry.endOccurrences) {
         endLabel = `<span class="entry-badge end-condition">${entry.endOccurrences}×</span>`;
+      }
+    }
+
+    // Calculation indicator
+    let calcIndicator = '';
+    if (hasCalculationConfig(entry)) {
+      const calcDesc = getCalculationDescription(entry);
+      const isOrphaned = hasOrphanedSources(entry);
+
+      if (isOrphaned) {
+        calcIndicator = `<span class="orphaned-warning" title="Source item missing">⚠ Missing source</span><button class="btn btn-link fix-link-btn" onclick="event.stopPropagation(); startEdit(${entry.id})">Fix</button>`;
+      } else if (entry.manualOverride) {
+        calcIndicator = `<span class="calc-indicator" title="${calcDesc}"><span class="calc-indicator-icon">📊</span> ${calcDesc}</span><span class="override-indicator" title="Using manual override">overridden</span>`;
+      } else {
+        calcIndicator = `<span class="calc-indicator" title="${calcDesc}"><span class="calc-indicator-icon">📊</span> ${calcDesc}</span>`;
       }
     }
 
@@ -867,8 +1307,16 @@ function renderEntries() {
 
     const amountStyle = entry.type.startsWith('loc') ? 'color: #7c3aed;' : '';
 
+    // For calculated entries, show "(calculated)" if no manual override
+    let amountDisplay = '';
+    if (hasCalculationConfig(entry) && !entry.manualOverride) {
+      amountDisplay = '<span style="font-style: italic; color: var(--text-muted);">(calculated)</span>';
+    } else {
+      amountDisplay = `${amountPrefix}${formatCurrency(entry.amount)}`;
+    }
+
     return `
-      <div class="entry-row ${isSelected ? 'selected' : ''}">
+      <div class="entry-row ${isSelected ? 'selected' : ''} ${childClass}">
         <div class="checkbox-wrapper">
           <div class="checkbox ${isSelected ? 'checked' : ''}" onclick="toggleEntrySelection(${entry.id})"></div>
         </div>
@@ -876,11 +1324,12 @@ function renderEntries() {
         <div class="entry-desc">
           ${entry.type.startsWith('loc') ? '🏦 ' : ''}${entry.description}
           ${endLabel}
+          ${calcIndicator}
         </div>
         <div class="entry-type ${entry.type}">${typeLabels[entry.type]}</div>
         <div style="font-size: 12px; color: var(--text-secondary);">${entry.frequency !== 'once' ? freqLabel : '—'}</div>
         <div class="entry-amount ${amountClass}" style="${amountStyle}">
-          ${amountPrefix}${formatCurrency(entry.amount)}
+          ${amountDisplay}
         </div>
         <div class="action-buttons">
           <button class="btn-action btn-action-secondary" onclick="duplicateEntry(${entry.id})" title="Duplicate">Copy</button>
@@ -920,6 +1369,88 @@ function updateEntriesItemsPerPage() {
   state.entriesCurrentPage = 1;
   saveState();
   render();
+}
+
+function changeEntryDisplayMode() {
+  state.entryDisplayMode = document.getElementById('entryDisplayMode').value;
+  saveState();
+  renderEntries();
+}
+
+// Sort entries for grouped display - sources first, then their calculated children
+function getSortedEntriesForDisplay() {
+  const entries = [...state.entries];
+
+  if (state.entryDisplayMode === 'grouped') {
+    // Build a map of source -> calculated entries
+    const sourceToCalc = new Map();
+    const nonCalcEntries = [];
+    const calcEntries = [];
+
+    entries.forEach(entry => {
+      if (hasCalculationConfig(entry)) {
+        calcEntries.push(entry);
+      } else {
+        nonCalcEntries.push(entry);
+      }
+    });
+
+    // Sort non-calculated entries by date
+    nonCalcEntries.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Group calculated entries by their sources
+    calcEntries.forEach(calc => {
+      const sourceIds = calc.sourceEntryIds || [];
+      if (sourceIds.length > 0) {
+        const primarySourceId = sourceIds[0]; // Use first source as primary
+        if (!sourceToCalc.has(primarySourceId)) {
+          sourceToCalc.set(primarySourceId, []);
+        }
+        sourceToCalc.get(primarySourceId).push(calc);
+      } else if (calc.sourceMode === 'all_of_type') {
+        // For all_of_type, group under first matching entry
+        const matchingSource = nonCalcEntries.find(e => e.type === calc.sourceType);
+        if (matchingSource) {
+          if (!sourceToCalc.has(matchingSource.id)) {
+            sourceToCalc.set(matchingSource.id, []);
+          }
+          sourceToCalc.get(matchingSource.id).push(calc);
+        } else {
+          nonCalcEntries.push(calc); // No source, add to end
+        }
+      }
+    });
+
+    // Build final sorted list with children after parents
+    const result = [];
+    const addedCalcIds = new Set();
+
+    nonCalcEntries.forEach(entry => {
+      result.push({ entry, isChild: false });
+
+      // Add any calculated entries that depend on this source
+      const children = sourceToCalc.get(entry.id) || [];
+      children.forEach(child => {
+        if (!addedCalcIds.has(child.id)) {
+          result.push({ entry: child, isChild: true });
+          addedCalcIds.add(child.id);
+        }
+      });
+    });
+
+    // Add any orphaned calculated entries
+    calcEntries.forEach(calc => {
+      if (!addedCalcIds.has(calc.id)) {
+        result.push({ entry: calc, isChild: false });
+      }
+    });
+
+    return result;
+  } else {
+    // Date sorted - simple sort
+    entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+    return entries.map(entry => ({ entry, isChild: false }));
+  }
 }
 
 function renderChecklist(forecast) {
@@ -1193,6 +1724,7 @@ function resetForm() {
   document.getElementById('cancelEditBtn').classList.add('hidden');
   editingEntryId = null;
   toggleEndCondition();
+  resetCalculationForm();
 }
 
 function editEntry(id) {
@@ -1207,8 +1739,10 @@ function editEntry(id) {
   document.getElementById('newDate').value = entry.date;
   document.getElementById('newDesc').value = entry.description;
   document.getElementById('newType').value = entry.type;
-  document.getElementById('newAmount').value = entry.amount;
   document.getElementById('newRecurring').value = entry.frequency;
+
+  // Set calculation form data (handles amount and calculation settings)
+  setCalculationFormData(entry);
 
   toggleEndCondition();
   if (entry.frequency !== 'once') {
@@ -1242,20 +1776,43 @@ function submitEntry() {
   const date = document.getElementById('newDate').value;
   const desc = document.getElementById('newDesc').value;
   const type = document.getElementById('newType').value;
-  const amount = parseFloat(document.getElementById('newAmount').value);
   const frequency = document.getElementById('newRecurring').value;
 
-  if (!date || !desc || !amount) {
-    alert('Please fill in all required fields');
+  // Get calculation/amount data
+  const calcData = getCalculationFormData();
+
+  // Validate required fields
+  if (!date || !desc) {
+    alert('Please fill in date and description');
     return;
+  }
+
+  // Validate amount for manual entries
+  const isCalculated = document.querySelector('input[name="amountType"]:checked').value === 'calculated';
+  if (!isCalculated && !calcData.amount) {
+    alert('Please enter an amount');
+    return;
+  }
+
+  // Validate calculated entry settings
+  if (isCalculated) {
+    if (!calcData.calculationValue || calcData.calculationValue <= 0) {
+      alert('Please enter a valid calculation percentage or value');
+      return;
+    }
+
+    if (calcData.sourceMode === 'selected' && calcData.sourceEntryIds.length === 0) {
+      alert('Please select at least one source item');
+      return;
+    }
   }
 
   const entryData = {
     date,
     description: desc,
     type,
-    amount,
-    frequency
+    frequency,
+    ...calcData
   };
 
   if (frequency !== 'once') {
@@ -1306,6 +1863,398 @@ function toggleEndConditionInputs() {
   } else if (condType === 'occurrences') {
     document.getElementById('endOccurrencesGroup').classList.remove('hidden');
   }
+}
+
+// ==================== CALCULATION UI FUNCTIONS ====================
+
+// Track selected source IDs for multi-select
+let selectedSourceIds = new Set();
+
+function toggleAmountType() {
+  const isCalculated = document.querySelector('input[name="amountType"]:checked').value === 'calculated';
+  const manualGroup = document.getElementById('manualAmountGroup');
+  const calcSettings = document.getElementById('calculationSettings');
+
+  if (isCalculated) {
+    manualGroup.classList.add('hidden');
+    calcSettings.classList.remove('hidden');
+    populateSourceItemsList();
+    toggleCalcType(); // Initialize calc type visibility
+  } else {
+    manualGroup.classList.remove('hidden');
+    calcSettings.classList.add('hidden');
+  }
+}
+
+function toggleCalcType() {
+  const calcType = document.getElementById('calcType').value;
+  const sourceModeGroup = document.getElementById('sourceModeGroup');
+  const sourceSelectionGroup = document.getElementById('sourceSelectionGroup');
+  const sourceTypeGroup = document.getElementById('sourceTypeGroup');
+  const locInterestSettings = document.getElementById('locInterestSettings');
+  const sourcePeriodRow = document.getElementById('sourcePeriod').closest('.form-grid');
+  const calcTypeHelp = document.getElementById('calcTypeHelp');
+
+  if (calcType === 'balance_percentage') {
+    // Hide source-based settings, show LOC interest settings
+    sourceModeGroup.classList.add('hidden');
+    sourceSelectionGroup.classList.add('hidden');
+    sourceTypeGroup.classList.add('hidden');
+    locInterestSettings.classList.remove('hidden');
+
+    // Update placeholder for APR
+    document.getElementById('calcValue').placeholder = '8.0';
+
+    // Update help text
+    if (calcTypeHelp) {
+      calcTypeHelp.textContent = 'Enter the annual percentage rate (APR). Interest will be calculated based on your LOC balance.';
+    }
+
+    // For LOC interest, show only monthly/weekly time period options
+    const sourcePeriod = document.getElementById('sourcePeriod');
+    sourcePeriod.innerHTML = `
+      <option value="same_month">Monthly</option>
+      <option value="same_week">Weekly</option>
+    `;
+    toggleSourcePeriod();
+  } else {
+    // Show source-based settings, hide LOC interest settings
+    sourceModeGroup.classList.remove('hidden');
+    locInterestSettings.classList.add('hidden');
+    toggleSourceMode(); // Restore proper source mode visibility
+
+    // Update placeholder
+    document.getElementById('calcValue').placeholder = calcType === 'fixed' ? '0.30' : '2.9';
+
+    // Update help text
+    if (calcTypeHelp) {
+      if (calcType === 'percentage') {
+        calcTypeHelp.textContent = '';
+      } else if (calcType === 'fixed') {
+        calcTypeHelp.textContent = 'Fixed amount charged for each occurrence of the source item(s).';
+      }
+    }
+
+    // Restore all time period options
+    const sourcePeriod = document.getElementById('sourcePeriod');
+    const currentValue = sourcePeriod.value;
+    sourcePeriod.innerHTML = `
+      <option value="same_day">Same day</option>
+      <option value="same_week">Same week</option>
+      <option value="same_month">Same month</option>
+      <option value="rolling_days">Rolling days</option>
+    `;
+    if (['same_day', 'same_week', 'same_month', 'rolling_days'].includes(currentValue)) {
+      sourcePeriod.value = currentValue;
+    }
+    toggleSourcePeriod();
+  }
+}
+
+function toggleSourceMode() {
+  const mode = document.getElementById('sourceMode').value;
+  const selectionGroup = document.getElementById('sourceSelectionGroup');
+  const typeGroup = document.getElementById('sourceTypeGroup');
+
+  if (mode === 'all_of_type') {
+    selectionGroup.classList.add('hidden');
+    typeGroup.classList.remove('hidden');
+  } else {
+    selectionGroup.classList.remove('hidden');
+    typeGroup.classList.add('hidden');
+    populateSourceItemsList();
+  }
+}
+
+function toggleSourcePeriod() {
+  const period = document.getElementById('sourcePeriod').value;
+  const rollingGroup = document.getElementById('rollingDaysGroup');
+  const helpText = document.getElementById('sourcePeriodHelp');
+
+  if (period === 'rolling_days') {
+    rollingGroup.classList.remove('hidden');
+  } else {
+    rollingGroup.classList.add('hidden');
+  }
+
+  // Update help text based on selection
+  const helpTexts = {
+    'same_day': 'Creates a calculated entry each day the source item(s) occur. Example: Daily CC fees on daily sales. To calculate the interest payment on a loan, enter the number of days after loan taken out that the interest is due in the Date offset field.',
+    'same_week': 'Sums all source amounts in the same calendar week (Sun-Sat). Example: Weekly processing fee on all week\'s sales.',
+    'same_month': 'Sums all source amounts in the same calendar month. Example: Monthly fee based on total monthly revenue.',
+    'rolling_days': 'Sums source amounts from the past N days. Example: 30-day rolling average fee.'
+  };
+
+  if (helpText) {
+    helpText.textContent = helpTexts[period] || '';
+  }
+}
+
+function populateSourceItemsList(searchTerm = null) {
+  const container = document.getElementById('sourceItemsList');
+  const searchInput = document.getElementById('sourceSearchInput');
+  const availableSources = getAvailableSourceEntries(editingEntryId);
+
+  // Use provided searchTerm or get from input
+  const filterTerm = searchTerm !== null ? searchTerm : (searchInput ? searchInput.value : '');
+
+  if (availableSources.length === 0) {
+    container.innerHTML = '<div class="no-source-items">No items available. Add some regular entries first.</div>';
+    return;
+  }
+
+  // Filter by search term
+  const filteredSources = filterTerm
+    ? availableSources.filter(entry =>
+        entry.description.toLowerCase().includes(filterTerm.toLowerCase()))
+    : availableSources;
+
+  if (filteredSources.length === 0) {
+    container.innerHTML = '<div class="no-source-items">No matching items found.</div>';
+    return;
+  }
+
+  const typeLabels = {
+    'revenue': 'Income',
+    'expense': 'Expense',
+    'loc_draw': 'LOC Draw',
+    'loc_paydown': 'LOC Paydown'
+  };
+
+  const html = filteredSources.map(entry => {
+    const isSelected = selectedSourceIds.has(entry.id);
+    const freqLabel = frequencyLabels[entry.frequency] || entry.frequency;
+    const dateLabel = entry.frequency === 'once'
+      ? formatDate(entry.date)
+      : `starts ${formatDate(entry.date)}`;
+
+    return `
+      <div class="source-item ${isSelected ? 'selected' : ''}" onclick="toggleSourceItem(${entry.id})">
+        <div class="source-item-checkbox"></div>
+        <div class="source-item-info">
+          <div class="source-item-name">${entry.description}</div>
+          <div class="source-item-details">${typeLabels[entry.type] || entry.type} · ${freqLabel} · ${dateLabel}</div>
+        </div>
+        <div class="source-item-amount">${formatCurrency(entry.amount)}</div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = html;
+}
+
+function filterSourceItems() {
+  const searchTerm = document.getElementById('sourceSearchInput').value;
+  populateSourceItemsList(searchTerm);
+}
+
+function toggleSourceItem(id) {
+  if (selectedSourceIds.has(id)) {
+    selectedSourceIds.delete(id);
+  } else {
+    selectedSourceIds.add(id);
+  }
+  populateSourceItemsList();
+}
+
+function getCalculationFormData() {
+  const isCalculated = document.querySelector('input[name="amountType"]:checked').value === 'calculated';
+
+  if (!isCalculated) {
+    return {
+      amount: parseFloat(document.getElementById('newAmount').value) || 0,
+      calculationType: null,
+      calculationValue: null,
+      sourceMode: null,
+      sourceEntryIds: [],
+      sourceType: null,
+      sourcePeriod: null,
+      sourcePeriodDays: null,
+      dateOffset: 0,
+      manualOverride: false,
+      locBalanceType: null,
+      periodTiming: null
+    };
+  }
+
+  const calcType = document.getElementById('calcType').value;
+  const sourceMode = document.getElementById('sourceMode').value;
+  const useOverride = document.getElementById('useManualOverride').checked;
+  const overrideAmount = parseFloat(document.getElementById('overrideAmount').value) || null;
+
+  // Base fields for all calculation types
+  const data = {
+    amount: useOverride ? overrideAmount : null,
+    calculationType: calcType,
+    calculationValue: parseFloat(document.getElementById('calcValue').value) || 0,
+    sourcePeriod: document.getElementById('sourcePeriod').value,
+    sourcePeriodDays: document.getElementById('sourcePeriod').value === 'rolling_days'
+      ? parseInt(document.getElementById('sourcePeriodDays').value) || 30
+      : null,
+    dateOffset: parseInt(document.getElementById('dateOffset').value) || 0,
+    manualOverride: useOverride
+  };
+
+  // LOC balance percentage specific fields
+  if (calcType === 'balance_percentage') {
+    data.sourceMode = null;
+    data.sourceEntryIds = [];
+    data.sourceType = null;
+    data.locBalanceType = document.getElementById('locBalanceType').value;
+    data.periodTiming = document.getElementById('periodTiming').value;
+  } else {
+    // Source-based calculation fields
+    data.sourceMode = sourceMode;
+    data.sourceEntryIds = sourceMode === 'selected' ? Array.from(selectedSourceIds) : [];
+    data.sourceType = sourceMode === 'all_of_type' ? document.getElementById('sourceType').value : null;
+    data.locBalanceType = null;
+    data.periodTiming = null;
+  }
+
+  return data;
+}
+
+function setCalculationFormData(entry) {
+  if (hasCalculationConfig(entry)) {
+    // Set to calculated mode
+    document.querySelector('input[name="amountType"][value="calculated"]').checked = true;
+    toggleAmountType();
+
+    document.getElementById('calcType').value = entry.calculationType || 'percentage';
+    toggleCalcType(); // Set up visibility based on calc type
+
+    document.getElementById('calcValue').value = entry.calculationValue || '';
+
+    // Handle LOC balance percentage type
+    if (entry.calculationType === 'balance_percentage') {
+      document.getElementById('locBalanceType').value = entry.locBalanceType || 'average';
+      document.getElementById('periodTiming').value = entry.periodTiming || 'end';
+    } else {
+      // Handle source-based calculation types
+      document.getElementById('sourceMode').value = entry.sourceMode || 'selected';
+      toggleSourceMode();
+
+      if (entry.sourceMode === 'all_of_type') {
+        document.getElementById('sourceType').value = entry.sourceType || 'revenue';
+      } else {
+        selectedSourceIds = new Set(entry.sourceEntryIds || []);
+        populateSourceItemsList();
+      }
+    }
+
+    document.getElementById('sourcePeriod').value = entry.sourcePeriod || 'same_day';
+    toggleSourcePeriod();
+
+    if (entry.sourcePeriod === 'rolling_days') {
+      document.getElementById('sourcePeriodDays').value = entry.sourcePeriodDays || 30;
+    }
+
+    document.getElementById('dateOffset').value = entry.dateOffset || 0;
+
+    // Show override section when editing
+    showOverrideSection(entry);
+
+    // Handle manual override
+    if (entry.manualOverride && entry.amount !== null) {
+      document.getElementById('useManualOverride').checked = true;
+      document.getElementById('overrideAmountGroup').classList.remove('hidden');
+      document.getElementById('overrideAmount').value = entry.amount;
+    }
+  } else {
+    // Set to manual mode
+    document.querySelector('input[name="amountType"][value="manual"]').checked = true;
+    toggleAmountType();
+    document.getElementById('newAmount').value = entry.amount || '';
+    hideOverrideSection();
+  }
+}
+
+function showOverrideSection(entry) {
+  const section = document.getElementById('manualOverrideSection');
+  section.classList.remove('hidden');
+
+  // Calculate and show the preview amount
+  updateCalculatedPreview(entry);
+}
+
+function hideOverrideSection() {
+  const section = document.getElementById('manualOverrideSection');
+  section.classList.add('hidden');
+  document.getElementById('useManualOverride').checked = false;
+  document.getElementById('overrideAmountGroup').classList.add('hidden');
+  document.getElementById('overrideAmount').value = '';
+}
+
+function updateCalculatedPreview(entry) {
+  const preview = document.getElementById('calculatedPreview');
+
+  if (!entry || !hasCalculationConfig(entry)) {
+    preview.textContent = '';
+    return;
+  }
+
+  // Get source amounts to calculate what the value would be
+  const sources = getSourceEntries(entry);
+  if (sources.length === 0) {
+    preview.textContent = '(no source data)';
+    return;
+  }
+
+  // Calculate based on sources' amounts
+  const totalSourceAmount = sources.reduce((sum, s) => sum + (s.amount || 0), 0);
+
+  let calculatedAmount = 0;
+  if (entry.calculationType === 'percentage') {
+    calculatedAmount = Math.round(totalSourceAmount * (entry.calculationValue / 100) * 100) / 100;
+  } else if (entry.calculationType === 'fixed') {
+    calculatedAmount = entry.calculationValue;
+  }
+
+  if (entry.manualOverride) {
+    preview.innerHTML = `Calculated would be: <strong>${formatCurrency(calculatedAmount)}</strong>`;
+  } else {
+    preview.innerHTML = `Calculates to: <strong>${formatCurrency(calculatedAmount)}</strong> per occurrence`;
+  }
+}
+
+function toggleManualOverride() {
+  const isOverride = document.getElementById('useManualOverride').checked;
+  const overrideGroup = document.getElementById('overrideAmountGroup');
+
+  if (isOverride) {
+    overrideGroup.classList.remove('hidden');
+    // Pre-fill with the calculated amount if available
+    const preview = document.getElementById('calculatedPreview');
+    const match = preview.textContent.match(/\$[\d,]+/);
+    if (match) {
+      const amount = parseFloat(match[0].replace(/[$,]/g, ''));
+      document.getElementById('overrideAmount').value = amount || '';
+    }
+  } else {
+    overrideGroup.classList.add('hidden');
+    document.getElementById('overrideAmount').value = '';
+  }
+}
+
+function resetCalculationForm() {
+  document.querySelector('input[name="amountType"][value="manual"]').checked = true;
+  toggleAmountType();
+  document.getElementById('calcValue').value = '';
+  document.getElementById('calcType').value = 'percentage';
+  document.getElementById('sourceMode').value = 'selected';
+  document.getElementById('sourceType').value = 'revenue';
+  document.getElementById('sourcePeriod').value = 'same_day';
+  document.getElementById('sourcePeriodDays').value = '30';
+  document.getElementById('dateOffset').value = '0';
+  document.getElementById('sourceSearchInput').value = '';
+  // Reset LOC interest fields
+  document.getElementById('locBalanceType').value = 'average';
+  document.getElementById('periodTiming').value = 'end';
+  selectedSourceIds.clear();
+  toggleSourceMode();
+  toggleSourcePeriod();
+  toggleCalcType();
+  hideOverrideSection();
 }
 
 function deleteEntry(id) {

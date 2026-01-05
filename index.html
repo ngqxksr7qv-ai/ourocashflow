@@ -197,8 +197,17 @@
     <!-- Entries Tab -->
     <div id="entriesTab" class="card hidden">
       <div class="card-title">
-        Projection Items
-        <button class="btn btn-primary" onclick="toggleAddForm()">+ Add New</button>
+        <span>Projection Items</span>
+        <div class="title-actions">
+          <div class="entry-display-toggle">
+            <label>Calculated Projections:</label>
+            <select id="entryDisplayMode" onchange="changeEntryDisplayMode()">
+              <option value="grouped">Grouped with source</option>
+              <option value="date_sorted">Sort by date</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="toggleAddForm()">+ Add New</button>
+        </div>
       </div>
 
       <div id="addForm" class="add-form hidden">
@@ -225,6 +234,19 @@
             </select>
           </div>
           <div class="input-group">
+            <label>Amount</label>
+            <div class="amount-type-toggle">
+              <label class="radio-label">
+                <input type="radio" name="amountType" value="manual" checked onchange="toggleAmountType()">
+                <span>Manual</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="amountType" value="calculated" onchange="toggleAmountType()">
+                <span>Calculated</span>
+              </label>
+            </div>
+          </div>
+          <div class="input-group" id="manualAmountGroup">
             <label>Amount</label>
             <input type="number" class="input" id="newAmount" placeholder="0" style="font-family: 'IBM Plex Mono', monospace;">
           </div>
@@ -263,6 +285,108 @@
           <div class="input-group hidden" id="endOccurrencesGroup" style="min-width: 120px;">
             <label># of Times</label>
             <input type="number" class="input" id="endOccurrences" placeholder="e.g., 12" min="1">
+          </div>
+        </div>
+
+        <!-- Calculation Settings (shown when "Calculated" is selected) -->
+        <div id="calculationSettings" class="calculation-settings hidden">
+          <div class="calculation-settings-title">Calculation Settings</div>
+          <div class="form-grid">
+            <div class="input-group">
+              <label>Calculate</label>
+              <div class="calc-input-row">
+                <input type="number" class="input calc-value-input" id="calcValue" step="0.01" placeholder="2.9">
+                <select class="input" id="calcType" onchange="toggleCalcType()">
+                  <option value="percentage">% of amount</option>
+                  <option value="fixed">Fixed per occurrence</option>
+                  <option value="balance_percentage">% APR on LOC balance</option>
+                </select>
+              </div>
+              <div class="input-help" id="calcTypeHelp"></div>
+            </div>
+            <div class="input-group" id="sourceModeGroup">
+              <label>Based on</label>
+              <select class="input" id="sourceMode" onchange="toggleSourceMode()">
+                <option value="selected">Specific items</option>
+                <option value="all_of_type">All items of type</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- LOC Interest Settings (shown when balance_percentage is selected) -->
+          <div id="locInterestSettings" class="loc-interest-settings hidden">
+            <div class="input-group">
+              <label>Calculate interest on</label>
+              <select class="input" id="locBalanceType">
+                <option value="average">Average balance for period</option>
+                <option value="end">Balance at end of period</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label>Charge interest</label>
+              <select class="input" id="periodTiming">
+                <option value="end">At end of period (default)</option>
+                <option value="start">At start of period</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Manual Override Section (shown when editing a calculated entry) -->
+          <div id="manualOverrideSection" class="manual-override-section hidden">
+            <div class="override-divider"></div>
+            <div class="override-header">
+              <label class="override-checkbox-label">
+                <input type="checkbox" id="useManualOverride" onchange="toggleManualOverride()">
+                <span>Override with manual amount</span>
+              </label>
+              <span id="calculatedPreview" class="calculated-preview"></span>
+            </div>
+            <div id="overrideAmountGroup" class="input-group hidden">
+              <label>Override Amount</label>
+              <input type="number" class="input" id="overrideAmount" placeholder="0" style="font-family: 'IBM Plex Mono', monospace;">
+            </div>
+          </div>
+
+          <div id="sourceSelectionGroup" class="source-selection-group">
+            <label>Select source items</label>
+            <input type="text" class="input source-search-input" id="sourceSearchInput" placeholder="Search items..." oninput="filterSourceItems()">
+            <div class="source-items-list" id="sourceItemsList">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <div id="sourceTypeGroup" class="input-group hidden">
+            <label>Item type</label>
+            <select class="input" id="sourceType">
+              <option value="revenue">All Income</option>
+              <option value="expense">All Expenses</option>
+              <option value="loc_draw">All LOC Draws</option>
+              <option value="loc_paydown">All LOC Paydowns</option>
+            </select>
+          </div>
+
+          <div class="form-grid">
+            <div class="input-group">
+              <label>Time period</label>
+              <select class="input" id="sourcePeriod" onchange="toggleSourcePeriod()">
+                <option value="same_day">Same day</option>
+                <option value="same_week">Same week</option>
+                <option value="same_month">Same month</option>
+                <option value="rolling_days">Rolling days</option>
+              </select>
+              <div class="input-help" id="sourcePeriodHelp">Calculates when source item(s) occur on that day</div>
+            </div>
+            <div class="input-group hidden" id="rollingDaysGroup">
+              <label>Look back days</label>
+              <input type="number" class="input" id="sourcePeriodDays" value="30" min="1">
+            </div>
+            <div class="input-group">
+              <label>Date offset</label>
+              <div class="calc-input-row">
+                <input type="number" class="input" id="dateOffset" value="0" min="0" style="width: 80px;">
+                <span class="offset-label">days after source</span>
+              </div>
+            </div>
           </div>
         </div>
 
