@@ -1286,7 +1286,7 @@ function renderEntries() {
       const isOrphaned = hasOrphanedSources(entry);
 
       if (isOrphaned) {
-        calcIndicator = `<span class="orphaned-warning" title="Source item missing">⚠ Missing source</span>`;
+        calcIndicator = `<span class="orphaned-warning" title="Source item missing">⚠ Missing source</span><button class="btn btn-link fix-link-btn" onclick="event.stopPropagation(); startEdit(${entry.id})">Fix</button>`;
       } else if (entry.manualOverride) {
         calcIndicator = `<span class="calc-indicator" title="${calcDesc}"><span class="calc-indicator-icon">📊</span> ${calcDesc}</span><span class="override-indicator" title="Using manual override">overridden</span>`;
       } else {

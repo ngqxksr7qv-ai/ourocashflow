@@ -1545,6 +1545,16 @@ input[type="file"] {
   margin-left: 8px;
 }
 
+/* Fix broken link button */
+.fix-link-btn {
+  font-size: 11px;
+  color: var(--accent-coral);
+  padding: 0 4px;
+  margin-left: 4px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* Entry row for calculated items - grouped display */
 .entry-row.calculated-child {
   margin-left: 24px;
@@ -1665,16 +1675,20 @@ input[type="file"] {
 
 .entry-row.child-entry {
   position: relative;
+  margin-left: 20px;
+  background: linear-gradient(to right, var(--accent-blue-light) 0%, transparent 4px);
+  border-left: 2px solid var(--accent-blue);
 }
 
 .entry-row.child-entry::before {
   content: "↳";
   position: absolute;
-  left: -18px;
+  left: 6px;
   color: var(--accent-blue);
-  font-size: 12px;
+  font-size: 14px;
   top: 50%;
   transform: translateY(-50%);
+  font-weight: bold;
 }
 
 /* Input help text */
