@@ -119,6 +119,7 @@
       <button class="tab" onclick="showTab('table')">Table View</button>
       <button class="tab" onclick="showTab('entries')">Projection Items</button>
       <button class="tab" onclick="showTab('checklist')">Checklist</button>
+      <button class="tab" onclick="showTab('help')">Help</button>
     </div>
 
     <!-- Export Reminder -->
@@ -418,6 +419,525 @@
         <div class="info-box-title">The key to good forecasting</div>
         <div class="info-box-text">
           Keep your data current and this tool will help you see problems before they happen. You know your committed expenses better than any accounting system—use that knowledge here.
+        </div>
+      </div>
+    </div>
+
+    <!-- Help Tab -->
+    <div id="helpTab" class="card hidden">
+      <div class="help-content">
+        <h1 class="help-title">Managing Your Line of Credit: A Complete Guide</h1>
+
+        <div class="help-section">
+          <h2 class="help-section-title">Overview</h2>
+          <p>This guide shows you how to use Ouro Cash Flow to project when you'll need to draw on your line of credit (LOC) and when you can pay it back. The goal is to <strong>minimize interest costs</strong> by drawing only when necessary and repaying as quickly as possible.</p>
+
+          <div class="help-callout help-callout-info">
+            <div class="help-callout-icon">💡</div>
+            <div class="help-callout-content">
+              <strong>Key Principle:</strong> Borrow only what you need, when you need it, and pay it back as soon as you have surplus cash. Every day you reduce your LOC balance saves you interest.
+            </div>
+          </div>
+        </div>
+
+        <div class="help-section">
+          <h2 class="help-section-title">Step 1: Set Up Your Cash Position & Line of Credit</h2>
+
+          <p>Start by entering your current financial position in the <strong>Cash Position</strong> card at the top of the app.</p>
+
+          <div class="help-screenshot-placeholder">
+            <div class="help-screenshot-label">Screenshot: Cash Position Settings</div>
+            <div class="help-screenshot-desc">Shows the three input fields: Current Cash Balance, Line of Credit Limit, and Current LOC Balance</div>
+          </div>
+
+          <div class="help-steps">
+            <div class="help-step">
+              <div class="help-step-number">1</div>
+              <div class="help-step-content">
+                <strong>Current Cash Balance:</strong> Enter your actual bank account balance today. Keep this updated regularly for accurate projections.
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">2</div>
+              <div class="help-step-content">
+                <strong>Line of Credit Limit:</strong> Enter the maximum amount you can borrow from your LOC. For example, if your bank approved a $50,000 line of credit, enter 50000.
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">3</div>
+              <div class="help-step-content">
+                <strong>Current LOC Balance:</strong> Enter how much you currently owe on your line of credit. If you haven't borrowed anything, enter 0.
+              </div>
+            </div>
+          </div>
+
+          <div class="help-callout help-callout-tip">
+            <div class="help-callout-icon">✓</div>
+            <div class="help-callout-content">
+              <strong>Best Practice:</strong> Update your current cash balance at least weekly, or before making any important financial decisions. The more current your data, the more reliable your projections.
+            </div>
+          </div>
+        </div>
+
+        <div class="help-section">
+          <h2 class="help-section-title">Step 2: Add Your Income & Expenses</h2>
+
+          <p>Go to the <strong>Projection Items</strong> tab and add all your expected income and expenses.</p>
+
+          <div class="help-screenshot-placeholder">
+            <div class="help-screenshot-label">Screenshot: Projection Items Tab</div>
+            <div class="help-screenshot-desc">Shows the "Add New" button and the form for creating income/expense entries</div>
+          </div>
+
+          <div class="help-steps">
+            <div class="help-step">
+              <div class="help-step-number">1</div>
+              <div class="help-step-content">
+                Click <strong>"+ Add New"</strong> button
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">2</div>
+              <div class="help-step-content">
+                Fill in the details:
+                <ul>
+                  <li><strong>Start Date:</strong> When this transaction begins</li>
+                  <li><strong>Description:</strong> What it's for (e.g., "Customer payments," "Rent," "Payroll")</li>
+                  <li><strong>Type:</strong> Select Income or Expense</li>
+                  <li><strong>Amount:</strong> The dollar amount</li>
+                  <li><strong>Frequency:</strong> How often it occurs (one-time, weekly, monthly, etc.)</li>
+                </ul>
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">3</div>
+              <div class="help-step-content">
+                For recurring items, set an end condition if applicable (specific date, number of occurrences, or ongoing)
+              </div>
+            </div>
+          </div>
+
+          <div class="help-callout help-callout-tip">
+            <div class="help-callout-icon">✓</div>
+            <div class="help-callout-content">
+              <strong>Best Practice:</strong> Include all committed expenses (rent, payroll, loan payments, utilities) even if they seem small. Small expenses add up and affect when you'll need to draw on your LOC.
+            </div>
+          </div>
+        </div>
+
+        <div class="help-section">
+          <h2 class="help-section-title">Step 3: Review the Dashboard & Alerts</h2>
+
+          <p>The <strong>Dashboard</strong> shows your financial outlook at a glance and alerts you when action is needed.</p>
+
+          <div class="help-screenshot-placeholder">
+            <div class="help-screenshot-label">Screenshot: Dashboard Metrics</div>
+            <div class="help-screenshot-desc">Shows the 6 metric cards: Current Cash, Period Income, Period Expenses, Projected Cash, Lowest Point, and LOC Available</div>
+          </div>
+
+          <h3>Understanding Dashboard Metrics</h3>
+
+          <div class="help-metric-list">
+            <div class="help-metric">
+              <strong>Current Cash:</strong> Your cash balance today
+            </div>
+            <div class="help-metric">
+              <strong>Period Income:</strong> Total revenue expected in the forecast period
+            </div>
+            <div class="help-metric">
+              <strong>Period Expenses:</strong> Total expenses expected in the forecast period
+            </div>
+            <div class="help-metric">
+              <strong>Projected Cash:</strong> Where your cash balance will be at the end of the forecast period (green = positive, red = negative)
+            </div>
+            <div class="help-metric">
+              <strong>Lowest Point:</strong> The minimum cash balance you'll reach and when. This is critical for LOC planning!
+            </div>
+            <div class="help-metric">
+              <strong>LOC Available:</strong> How much credit you have available now and at the end of the period
+            </div>
+          </div>
+
+          <h3>LOC Alerts</h3>
+
+          <div class="help-screenshot-placeholder">
+            <div class="help-screenshot-label">Screenshot: LOC Alert Banner</div>
+            <div class="help-screenshot-desc">Shows the red warning banner that appears when cash is projected to go negative, with specific draw amount and date</div>
+          </div>
+
+          <p>When your projected cash balance will go negative, you'll see a <strong>red alert</strong> at the top of the dashboard:</p>
+
+          <div class="help-callout help-callout-warning">
+            <div class="help-callout-icon">⚠️</div>
+            <div class="help-callout-content">
+              <strong>Heads up! You may need to draw on your line of credit</strong><br>
+              The alert tells you exactly how much to draw and by when, so you can plan ahead.
+            </div>
+          </div>
+
+          <p>You'll also see a <strong>purple reminder</strong> when you have scheduled LOC transactions coming up in the next 7 days.</p>
+        </div>
+
+        <div class="help-section">
+          <h2 class="help-section-title">Step 4: Analyze Your Cash Flow Timeline</h2>
+
+          <p>The <strong>Timeline</strong> tab shows your day-by-day cash flow projection with a visual chart.</p>
+
+          <div class="help-screenshot-placeholder">
+            <div class="help-screenshot-label">Screenshot: Cash Flow Timeline Chart</div>
+            <div class="help-screenshot-desc">Shows the line chart with cash balance over time, highlighting periods where balance goes negative</div>
+          </div>
+
+          <h3>Reading the Chart</h3>
+          <ul>
+            <li>The <strong>line</strong> shows your projected cash balance over time</li>
+            <li>When the line <strong>dips below zero</strong>, you need to draw on your LOC</li>
+            <li><strong>Green areas</strong> on the chart indicate positive balance</li>
+            <li>Hover over the chart to see exact balances on specific dates</li>
+          </ul>
+
+          <div class="help-screenshot-placeholder">
+            <div class="help-screenshot-label">Screenshot: Timeline Day Details</div>
+            <div class="help-screenshot-desc">Shows the detailed daily breakdown below the chart with transactions and running balance</div>
+          </div>
+
+          <h3>Timeline Details</h3>
+          <p>Below the chart, you'll see a day-by-day breakdown showing:</p>
+          <ul>
+            <li>All transactions occurring each day</li>
+            <li>Income shown in <span style="color: var(--accent-green);">green</span></li>
+            <li>Expenses shown in <span style="color: var(--accent-coral);">red</span></li>
+            <li>Running projected balance for each day</li>
+          </ul>
+
+          <div class="help-callout help-callout-tip">
+            <div class="help-callout-icon">✓</div>
+            <div class="help-callout-content">
+              <strong>Key Insight:</strong> Look for the lowest point in your cash flow. This tells you the maximum amount you might need to draw on your LOC.
+            </div>
+          </div>
+        </div>
+
+        <div class="help-section">
+          <h2 class="help-section-title">Step 5: Plan Your LOC Draws & Paydowns</h2>
+
+          <p>Once you know when your cash will go negative, you can schedule LOC transactions strategically.</p>
+
+          <h3>Adding a LOC Draw</h3>
+
+          <div class="help-steps">
+            <div class="help-step">
+              <div class="help-step-number">1</div>
+              <div class="help-step-content">
+                Go to the <strong>Projection Items</strong> tab and click <strong>"+ Add New"</strong>
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">2</div>
+              <div class="help-step-content">
+                Set the <strong>Date</strong> to 1-2 days before you need the funds (based on your lowest point)
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">3</div>
+              <div class="help-step-content">
+                Select <strong>Type: LOC Draw (borrow)</strong>
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">4</div>
+              <div class="help-step-content">
+                Enter the <strong>Amount</strong> you need to borrow (typically slightly more than the negative balance to maintain a buffer)
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">5</div>
+              <div class="help-step-content">
+                Set <strong>Frequency: One-time</strong> (or recurring if you have predictable cash flow gaps)
+              </div>
+            </div>
+          </div>
+
+          <div class="help-screenshot-placeholder">
+            <div class="help-screenshot-label">Screenshot: Adding LOC Draw</div>
+            <div class="help-screenshot-desc">Shows the form filled out with LOC Draw type selected</div>
+          </div>
+
+          <h3>Adding a LOC Paydown</h3>
+
+          <div class="help-steps">
+            <div class="help-step">
+              <div class="help-step-number">1</div>
+              <div class="help-step-content">
+                Look at your timeline to find when you have <strong>surplus cash</strong> (balance well above zero)
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">2</div>
+              <div class="help-step-content">
+                Add a new entry with <strong>Type: LOC Paydown (repay)</strong>
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">3</div>
+              <div class="help-step-content">
+                Set the <strong>Date</strong> when you'll have the surplus
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">4</div>
+              <div class="help-step-content">
+                Enter the <strong>Amount</strong> you can safely repay (leave enough buffer for operating expenses)
+              </div>
+            </div>
+          </div>
+
+          <div class="help-callout help-callout-warning">
+            <div class="help-callout-icon">⚠️</div>
+            <div class="help-callout-content">
+              <strong>Important:</strong> Always maintain a cash buffer! Don't pay down your LOC so aggressively that you immediately need to draw again. A good rule of thumb is to keep 5-10% of your monthly expenses as a cash buffer.
+            </div>
+          </div>
+        </div>
+
+        <div class="help-section">
+          <h2 class="help-section-title">Step 6: Track LOC Interest (Advanced)</h2>
+
+          <p>The app can automatically calculate interest charges on your line of credit balance.</p>
+
+          <div class="help-screenshot-placeholder">
+            <div class="help-screenshot-label">Screenshot: Calculated Entry - LOC Interest</div>
+            <div class="help-screenshot-desc">Shows the form with "Calculated" amount type selected and "% APR on LOC balance" calculation type</div>
+          </div>
+
+          <h3>Setting Up Automatic Interest Calculation</h3>
+
+          <div class="help-steps">
+            <div class="help-step">
+              <div class="help-step-number">1</div>
+              <div class="help-step-content">
+                Add a new entry and select <strong>Amount: Calculated</strong> (instead of Manual)
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">2</div>
+              <div class="help-step-content">
+                Select <strong>Type: Expense</strong>
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">3</div>
+              <div class="help-step-content">
+                Set <strong>Description:</strong> "LOC Interest" or "Line of Credit Interest"
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">4</div>
+              <div class="help-step-content">
+                In the calculation settings, enter your <strong>APR</strong> (e.g., 8 for 8%) and select <strong>"% APR on LOC balance"</strong>
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">5</div>
+              <div class="help-step-content">
+                Choose calculation method:
+                <ul>
+                  <li><strong>Average balance for period:</strong> More accurate, averages your balance over the month</li>
+                  <li><strong>Balance at end of period:</strong> Simpler, uses month-end balance</li>
+                </ul>
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">6</div>
+              <div class="help-step-content">
+                Set <strong>Time period: Same month</strong> for monthly interest charges
+              </div>
+            </div>
+            <div class="help-step">
+              <div class="help-step-number">7</div>
+              <div class="help-step-content">
+                Set <strong>Frequency: Monthly</strong> to match your bank's billing cycle
+              </div>
+            </div>
+          </div>
+
+          <div class="help-callout help-callout-info">
+            <div class="help-callout-icon">💡</div>
+            <div class="help-callout-content">
+              <strong>How It Works:</strong> The app automatically calculates interest based on your projected LOC balance. As you add draws and paydowns, the interest calculation updates automatically. This helps you see the true cost of borrowing.
+            </div>
+          </div>
+
+          <p><strong>Example:</strong> If you have an 8% APR and maintain a $10,000 LOC balance for a full month:</p>
+          <ul>
+            <li>Annual interest = $10,000 × 8% = $800</li>
+            <li>Monthly interest = $800 ÷ 12 = $66.67</li>
+          </ul>
+          <p>The app calculates this automatically and shows it as an expense in your forecast.</p>
+        </div>
+
+        <div class="help-section">
+          <h2 class="help-section-title">Best Practices for Minimizing Interest</h2>
+
+          <div class="help-best-practice">
+            <h3>1. Draw Just-In-Time</h3>
+            <p>Don't draw on your LOC weeks in advance. Draw 1-2 days before you need the funds. Every day you carry a balance costs you interest.</p>
+            <div class="help-example">
+              <strong>Example:</strong> If you need $10,000 on March 15th, draw it on March 13th or 14th, not on March 1st.
+            </div>
+          </div>
+
+          <div class="help-best-practice">
+            <h3>2. Pay Down Immediately When Possible</h3>
+            <p>As soon as you have surplus cash, pay down your LOC balance. Even paying down $1,000 early can save significant interest.</p>
+            <div class="help-example">
+              <strong>Example:</strong> If a customer payment comes in early, immediately schedule a paydown for that amount (minus your operating buffer).
+            </div>
+          </div>
+
+          <div class="help-best-practice">
+            <h3>3. Maintain a Small Cash Buffer</h3>
+            <p>Keep a buffer of 5-10% of monthly expenses in cash. This prevents the "draw-paydown-draw" cycle that increases transaction costs and complexity.</p>
+            <div class="help-example">
+              <strong>Example:</strong> If your monthly expenses are $50,000, keep $2,500-$5,000 in cash at all times.
+            </div>
+          </div>
+
+          <div class="help-best-practice">
+            <h3>4. Review Weekly</h3>
+            <p>Update your cash balance and review your forecast at least weekly. Things change—customers pay late, unexpected expenses arise. The sooner you know about problems, the better you can manage them.</p>
+          </div>
+
+          <div class="help-best-practice">
+            <h3>5. Plan for Seasonal Patterns</h3>
+            <p>If your business has seasonal cash flow (e.g., retail during holidays), extend your forecast to 6 months or more to see the full picture. You might need to maintain a higher LOC balance during slow months.</p>
+          </div>
+
+          <div class="help-best-practice">
+            <h3>6. Use the Table View</h3>
+            <p>Switch to the <strong>Table View</strong> tab to see monthly or weekly summaries. This makes it easy to spot patterns and plan your draws/paydowns strategically.</p>
+          </div>
+        </div>
+
+        <div class="help-section">
+          <h2 class="help-section-title">Real-World Example</h2>
+
+          <div class="help-example-box">
+            <h3>Scenario: Small Business Managing Payroll Gap</h3>
+
+            <p><strong>Situation:</strong></p>
+            <ul>
+              <li>Current cash balance: $15,000</li>
+              <li>Biweekly payroll: $25,000 (due every other Friday)</li>
+              <li>Customer payments: $30,000/month (received around the 25th of each month)</li>
+              <li>Line of credit: $50,000 limit, 8% APR</li>
+            </ul>
+
+            <p><strong>The Problem:</strong> Payroll is due on the 10th, but customer payments don't arrive until the 25th. Cash will go negative.</p>
+
+            <p><strong>The Solution:</strong></p>
+            <ol>
+              <li><strong>Add all entries</strong> to the Projection Items:
+                <ul>
+                  <li>Payroll: $25,000, every 2 weeks, starting next Friday</li>
+                  <li>Customer payments: $30,000, monthly, on the 25th</li>
+                  <li>Other expenses (rent, utilities, etc.)</li>
+                </ul>
+              </li>
+              <li><strong>Check the Dashboard:</strong> Lowest Point shows -$12,000 on the 10th</li>
+              <li><strong>Add LOC Draw:</strong> $15,000 on the 9th (enough to cover the gap plus a buffer)</li>
+              <li><strong>Add LOC Paydown:</strong> $15,000 on the 26th (right after customer payments arrive)</li>
+              <li><strong>Add LOC Interest:</strong> Calculated expense, 8% APR, monthly</li>
+            </ol>
+
+            <p><strong>The Result:</strong></p>
+            <ul>
+              <li>LOC balance is only $15,000 for about 17 days</li>
+              <li>Interest cost: approximately $15,000 × 8% × (17/365) = $56</li>
+              <li>Cash flow remains positive throughout the period</li>
+              <li>No surprises or overdraft fees</li>
+            </ul>
+
+            <p><strong>Optimization:</strong> If customer payments arrive on the 20th instead of the 25th, the paydown can happen 5 days earlier, saving ~$16 in interest.</p>
+          </div>
+        </div>
+
+        <div class="help-section">
+          <h2 class="help-section-title">Troubleshooting & Tips</h2>
+
+          <div class="help-faq">
+            <div class="help-faq-item">
+              <div class="help-faq-q">Q: The app says I need to draw on my LOC, but I have cash in the bank. Why?</div>
+              <div class="help-faq-a">A: Make sure your "Current Cash Balance" is up to date. If it's an old number, the projection will be wrong. Update it to your actual balance today.</div>
+            </div>
+
+            <div class="help-faq-item">
+              <div class="help-faq-q">Q: My interest calculation seems wrong. What should I check?</div>
+              <div class="help-faq-a">A: Verify that:
+                <ul>
+                  <li>You entered the APR correctly (8 for 8%, not 0.08)</li>
+                  <li>The frequency matches your bank's billing (usually monthly)</li>
+                  <li>Your LOC draws and paydowns are correctly entered</li>
+                  <li>The time period is set to "Same month" for monthly interest</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="help-faq-item">
+              <div class="help-faq-q">Q: Can I set up recurring LOC draws?</div>
+              <div class="help-faq-a">A: Yes! If you have a predictable gap every month (like the payroll example above), set the LOC draw to "Monthly" frequency. Just remember to also set up recurring paydowns when the cash comes in.</div>
+            </div>
+
+            <div class="help-faq-item">
+              <div class="help-faq-q">Q: What if my forecast shows I'll exceed my LOC limit?</div>
+              <div class="help-faq-a">A: This is a critical warning. You need to either:
+                <ul>
+                  <li>Reduce expenses where possible</li>
+                  <li>Accelerate revenue collection (offer early payment discounts?)</li>
+                  <li>Request a higher LOC limit from your bank</li>
+                  <li>Find alternative funding</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="help-faq-item">
+              <div class="help-faq-q">Q: How far ahead should I forecast?</div>
+              <div class="help-faq-a">A: Start with 3 months as a default. Extend to 6 months if you have seasonal patterns or are planning major expenses. The further out you look, the less certain the projections, but it's better to have an idea than to be caught by surprise.</div>
+            </div>
+
+            <div class="help-faq-item">
+              <div class="help-faq-q">Q: Should I pay down my LOC or keep cash for emergencies?</div>
+              <div class="help-faq-a">A: This depends on your business. A good approach is:
+                <ul>
+                  <li>Keep 1-2 weeks of operating expenses in cash as a buffer</li>
+                  <li>Pay down the LOC with any surplus beyond that buffer</li>
+                  <li>Review this buffer amount quarterly based on your comfort level</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="help-section">
+          <h2 class="help-section-title">Summary</h2>
+
+          <div class="help-callout help-callout-success">
+            <div class="help-callout-icon">🎯</div>
+            <div class="help-callout-content">
+              <strong>Remember:</strong>
+              <ol style="margin: 12px 0 0 0; padding-left: 20px;">
+                <li>Keep your current cash balance updated</li>
+                <li>Add all your income and expenses to Projection Items</li>
+                <li>Watch the Dashboard for alerts about LOC needs</li>
+                <li>Draw on your LOC just-in-time (1-2 days before you need funds)</li>
+                <li>Pay down your LOC as soon as you have surplus cash</li>
+                <li>Set up automatic interest calculations to track true borrowing costs</li>
+                <li>Review weekly and adjust as your situation changes</li>
+              </ol>
+            </div>
+          </div>
+
+          <p style="margin-top: 24px;">By following this guide, you'll minimize interest costs, avoid cash flow surprises, and make informed decisions about when to borrow and repay.</p>
         </div>
       </div>
     </div>
