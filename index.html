@@ -70,7 +70,13 @@
 
     <!-- Metrics -->
     <div class="metrics-header">
-      <div class="metrics-title">Dashboard</div>
+      <div class="metrics-title-row">
+        <span class="metrics-title">Dashboard</span>
+        <span id="dashboardScenarioIndicator" class="dashboard-scenario-indicator hidden">
+          <span class="dashboard-scenario-icon">🔮</span>
+          <span class="dashboard-scenario-text">Viewing: <strong id="dashboardScenarioName"></strong></span>
+        </span>
+      </div>
       <div class="metrics-timeframe">
         <span class="metrics-timeframe-label">Forecast period:</span>
         <select id="metricsTimeframe" onchange="updateMetricsTimeframe()">
@@ -112,6 +118,19 @@
           <input type="number" class="input" id="locBalance" value="0" onchange="updateSettings()" style="font-family: 'IBM Plex Mono', monospace;">
         </div>
       </div>
+    </div>
+
+    <!-- Scenario Selector -->
+    <div id="scenarioSelectorContainer"></div>
+
+    <!-- Scenario Warning Banner -->
+    <div id="scenarioWarningBanner" class="scenario-warning-banner hidden">
+      <div class="scenario-banner-icon">🔮</div>
+      <div class="scenario-banner-content">
+        <div class="scenario-banner-title">You're viewing an alternative scenario</div>
+        <div class="scenario-banner-desc">Scenario: <strong class="scenario-banner-name"></strong>. Changes here won't affect your Base Scenario.</div>
+      </div>
+      <button class="btn btn-sm btn-secondary" onclick="switchScenario('base')">Switch to Base</button>
     </div>
 
     <!-- Tabs -->
