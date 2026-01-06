@@ -114,6 +114,19 @@
       </div>
     </div>
 
+    <!-- Scenario Selector -->
+    <div id="scenarioSelectorContainer"></div>
+
+    <!-- Scenario Warning Banner -->
+    <div id="scenarioWarningBanner" class="scenario-warning-banner hidden">
+      <div class="scenario-banner-icon">🔮</div>
+      <div class="scenario-banner-content">
+        <div class="scenario-banner-title">You're viewing an alternative scenario</div>
+        <div class="scenario-banner-desc">Scenario: <strong class="scenario-banner-name"></strong>. Changes here won't affect your Base Scenario.</div>
+      </div>
+      <button class="btn btn-sm btn-secondary" onclick="switchScenario('base')">Switch to Base</button>
+    </div>
+
     <!-- Tabs -->
     <div class="tabs">
       <button class="tab active" onclick="showTab('forecast')">Timeline</button>

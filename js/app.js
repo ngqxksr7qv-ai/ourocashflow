@@ -16,14 +16,25 @@ let state = {
   entriesItemsPerPage: 50,
   entriesCurrentPage: 1,
   entryDisplayMode: 'grouped', // 'grouped' | 'date_sorted'
-  entries: [
-    { id: 1, date: '2026-01-02', description: 'Daily Sales', type: 'revenue', amount: 1200, frequency: 'daily' },
-    { id: 2, date: '2026-01-05', description: 'Inventory Restock', type: 'expense', amount: 8500, frequency: 'once' },
-    { id: 3, date: '2026-01-10', description: 'Payroll', type: 'expense', amount: 6200, frequency: 'every2weeks' },
-    { id: 4, date: '2026-01-15', description: 'Rent', type: 'expense', amount: 4500, frequency: 'monthly' },
-    { id: 5, date: '2026-01-15', description: 'Utilities', type: 'expense', amount: 850, frequency: 'monthly' },
-    { id: 6, date: '2026-01-20', description: 'Debt Payment', type: 'expense', amount: 2200, frequency: 'monthly' },
-  ]
+  // Scenario planning support
+  activeScenarioId: 'base',
+  scenarios: [
+    {
+      id: 'base',
+      name: 'Base Scenario',
+      isBase: true,
+      entries: [
+        { id: 1, date: '2026-01-02', description: 'Daily Sales', type: 'revenue', amount: 1200, frequency: 'daily' },
+        { id: 2, date: '2026-01-05', description: 'Inventory Restock', type: 'expense', amount: 8500, frequency: 'once' },
+        { id: 3, date: '2026-01-10', description: 'Payroll', type: 'expense', amount: 6200, frequency: 'every2weeks' },
+        { id: 4, date: '2026-01-15', description: 'Rent', type: 'expense', amount: 4500, frequency: 'monthly' },
+        { id: 5, date: '2026-01-15', description: 'Utilities', type: 'expense', amount: 850, frequency: 'monthly' },
+        { id: 6, date: '2026-01-20', description: 'Debt Payment', type: 'expense', amount: 2200, frequency: 'monthly' },
+      ]
+    }
+  ],
+  // Legacy entries field - kept for backwards compatibility during migration
+  entries: []
 };
 
 let editingEntryId = null;
@@ -45,6 +56,359 @@ const frequencyLabels = {
   'annual': 'Annual'
 };
 
+// ==================== SCENARIO HELPERS ====================
+
+// Get the active scenario object
+function getActiveScenario() {
+  return state.scenarios.find(s => s.id === state.activeScenarioId) || state.scenarios[0];
+}
+
+// Get entries for the active scenario (used throughout the app)
+function getActiveEntries() {
+  const scenario = getActiveScenario();
+  return scenario ? scenario.entries : [];
+}
+
+// Set entries for the active scenario
+function setActiveEntries(entries) {
+  const scenario = getActiveScenario();
+  if (scenario) {
+    scenario.entries = entries;
+  }
+}
+
+// Check if we're viewing an alternative (non-base) scenario
+function isAlternativeScenario() {
+  return state.activeScenarioId !== 'base';
+}
+
+// Generate a unique scenario ID
+function generateScenarioId() {
+  return 'scenario-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+}
+
+// Get the next entry ID for the current scenario
+function getNextEntryId() {
+  const entries = getActiveEntries();
+  if (entries.length === 0) return 1;
+  return Math.max(...entries.map(e => e.id)) + 1;
+}
+
+// Switch to a different scenario
+function switchScenario(scenarioId) {
+  const scenario = state.scenarios.find(s => s.id === scenarioId);
+  if (scenario) {
+    state.activeScenarioId = scenarioId;
+    state.entriesCurrentPage = 1;
+    state.timelineCurrentPage = 1;
+    saveState();
+    render();
+    renderScenarioSelector();
+    updateScenarioBanners();
+  }
+}
+
+// Create a new scenario
+function createScenario(name, duplicateBase = true) {
+  const newId = generateScenarioId();
+  let entries = [];
+
+  if (duplicateBase) {
+    // Deep clone entries from the base scenario
+    const baseScenario = state.scenarios.find(s => s.id === 'base');
+    if (baseScenario && baseScenario.entries) {
+      entries = JSON.parse(JSON.stringify(baseScenario.entries));
+    }
+  }
+
+  const newScenario = {
+    id: newId,
+    name: name,
+    isBase: false,
+    entries: entries
+  };
+
+  state.scenarios.push(newScenario);
+  state.activeScenarioId = newId;
+  saveState();
+  render();
+  renderScenarioSelector();
+  updateScenarioBanners();
+
+  return newScenario;
+}
+
+// Rename a scenario
+function renameScenario(scenarioId, newName) {
+  const scenario = state.scenarios.find(s => s.id === scenarioId);
+  if (scenario && !scenario.isBase) {
+    scenario.name = newName;
+    saveState();
+    renderScenarioSelector();
+  }
+}
+
+// Delete a scenario
+function deleteScenario(scenarioId) {
+  const scenario = state.scenarios.find(s => s.id === scenarioId);
+  if (!scenario || scenario.isBase) return; // Can't delete base scenario
+
+  // Remove the scenario
+  state.scenarios = state.scenarios.filter(s => s.id !== scenarioId);
+
+  // If we deleted the active scenario, switch to base
+  if (state.activeScenarioId === scenarioId) {
+    state.activeScenarioId = 'base';
+  }
+
+  saveState();
+  render();
+  renderScenarioSelector();
+  updateScenarioBanners();
+}
+
+// Render the scenario selector dropdown
+function renderScenarioSelector() {
+  const container = document.getElementById('scenarioSelectorContainer');
+  if (!container) return;
+
+  const activeScenario = getActiveScenario();
+  const isAlt = isAlternativeScenario();
+
+  const scenarioOptions = state.scenarios.map(s =>
+    `<option value="${s.id}" ${s.id === state.activeScenarioId ? 'selected' : ''}>${s.name}</option>`
+  ).join('');
+
+  container.innerHTML = `
+    <div class="scenario-selector ${isAlt ? 'scenario-alt-active' : ''}">
+      <div class="scenario-selector-label">
+        <span class="scenario-icon">${isAlt ? '🔮' : '📊'}</span>
+        <span>Scenario:</span>
+      </div>
+      <select id="scenarioDropdown" onchange="switchScenario(this.value)">
+        ${scenarioOptions}
+      </select>
+      <button class="btn btn-sm btn-secondary scenario-new-btn" onclick="showCreateScenarioModal()">+ New</button>
+      ${isAlt ? `
+        <button class="btn btn-sm btn-secondary scenario-edit-btn" onclick="showEditScenarioModal()">Edit</button>
+      ` : ''}
+    </div>
+  `;
+}
+
+// Show the create scenario modal
+function showCreateScenarioModal() {
+  const modal = document.createElement('div');
+  modal.id = 'scenarioModal';
+  modal.className = 'scenario-modal';
+
+  modal.innerHTML = `
+    <div class="scenario-dialog">
+      <div class="scenario-dialog-title">Create New Scenario</div>
+      <div class="scenario-dialog-desc">
+        Scenarios let you explore "what-if" situations without affecting your base forecast.
+      </div>
+      <div class="input-group" style="margin-bottom: 16px;">
+        <label>Scenario Name</label>
+        <input type="text" class="input" id="newScenarioName" placeholder="e.g., New Hire, Expansion Plan" autofocus>
+      </div>
+      <div class="scenario-options">
+        <div class="scenario-option selected" onclick="selectScenarioOption(this, 'duplicate')">
+          <div class="scenario-option-radio"></div>
+          <div class="scenario-option-content">
+            <div class="scenario-option-title">Start from Base (Recommended)</div>
+            <div class="scenario-option-desc">Copy all projection items from your Base Scenario as a starting point.</div>
+          </div>
+        </div>
+        <div class="scenario-option" onclick="selectScenarioOption(this, 'blank')">
+          <div class="scenario-option-radio"></div>
+          <div class="scenario-option-content">
+            <div class="scenario-option-title">Start Blank</div>
+            <div class="scenario-option-desc">Begin with no projection items. Not recommended for most use cases.</div>
+          </div>
+        </div>
+      </div>
+      <div id="blankScenarioWarning" class="scenario-warning hidden">
+        <span class="scenario-warning-icon">⚠️</span>
+        <span>A blank scenario won't show meaningful forecasts until you add projection items.</span>
+      </div>
+      <div class="confirm-buttons">
+        <button class="btn btn-secondary" onclick="hideScenarioModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmCreateScenario()">Create Scenario</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  document.getElementById('newScenarioName').focus();
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) hideScenarioModal();
+  });
+
+  // Store selected option
+  modal.dataset.option = 'duplicate';
+}
+
+// Select scenario creation option
+function selectScenarioOption(element, option) {
+  document.querySelectorAll('.scenario-option').forEach(el => el.classList.remove('selected'));
+  element.classList.add('selected');
+
+  const modal = document.getElementById('scenarioModal');
+  if (modal) modal.dataset.option = option;
+
+  const warning = document.getElementById('blankScenarioWarning');
+  if (warning) {
+    warning.classList.toggle('hidden', option !== 'blank');
+  }
+}
+
+// Confirm and create the scenario
+function confirmCreateScenario() {
+  const nameInput = document.getElementById('newScenarioName');
+  const name = nameInput.value.trim();
+
+  if (!name) {
+    nameInput.style.borderColor = 'var(--accent-coral)';
+    nameInput.focus();
+    return;
+  }
+
+  const modal = document.getElementById('scenarioModal');
+  const duplicateBase = modal.dataset.option !== 'blank';
+
+  createScenario(name, duplicateBase);
+  hideScenarioModal();
+}
+
+// Show the edit scenario modal
+function showEditScenarioModal() {
+  const scenario = getActiveScenario();
+  if (!scenario || scenario.isBase) return;
+
+  const modal = document.createElement('div');
+  modal.id = 'scenarioModal';
+  modal.className = 'scenario-modal';
+
+  modal.innerHTML = `
+    <div class="scenario-dialog">
+      <div class="scenario-dialog-title">Edit Scenario</div>
+      <div class="input-group" style="margin-bottom: 20px;">
+        <label>Scenario Name</label>
+        <input type="text" class="input" id="editScenarioName" value="${scenario.name}">
+      </div>
+      <div class="scenario-edit-actions">
+        <button class="btn btn-danger" onclick="confirmDeleteScenario('${scenario.id}')">Delete Scenario</button>
+      </div>
+      <div class="confirm-buttons">
+        <button class="btn btn-secondary" onclick="hideScenarioModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmRenameScenario('${scenario.id}')">Save Changes</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  document.getElementById('editScenarioName').focus();
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) hideScenarioModal();
+  });
+}
+
+// Confirm rename
+function confirmRenameScenario(scenarioId) {
+  const nameInput = document.getElementById('editScenarioName');
+  const name = nameInput.value.trim();
+
+  if (!name) {
+    nameInput.style.borderColor = 'var(--accent-coral)';
+    nameInput.focus();
+    return;
+  }
+
+  renameScenario(scenarioId, name);
+  hideScenarioModal();
+}
+
+// Confirm delete scenario
+function confirmDeleteScenario(scenarioId) {
+  const scenario = state.scenarios.find(s => s.id === scenarioId);
+  if (!scenario) return;
+
+  hideScenarioModal();
+
+  showConfirmModal(
+    'Delete Scenario?',
+    `Are you sure you want to delete "${scenario.name}"? This will remove all projection items in this scenario. This action cannot be undone.`,
+    () => {
+      deleteScenario(scenarioId);
+      hideConfirmModal();
+    }
+  );
+}
+
+// Hide scenario modal
+function hideScenarioModal() {
+  const modal = document.getElementById('scenarioModal');
+  if (modal) modal.remove();
+}
+
+// Update scenario warning banners
+function updateScenarioBanners() {
+  const dashboardBanner = document.getElementById('scenarioWarningBanner');
+  const isAlt = isAlternativeScenario();
+  const scenario = getActiveScenario();
+
+  if (dashboardBanner) {
+    if (isAlt && scenario) {
+      dashboardBanner.classList.remove('hidden');
+      dashboardBanner.querySelector('.scenario-banner-name').textContent = scenario.name;
+    } else {
+      dashboardBanner.classList.add('hidden');
+    }
+  }
+}
+
+// Migrate legacy state (entries array) to scenarios format
+function migrateToScenarios() {
+  // Check if we already have scenarios properly set up
+  if (state.scenarios && state.scenarios.length > 0 && state.scenarios[0].entries) {
+    // Already migrated, just ensure entries references active scenario
+    return;
+  }
+
+  // Check if we have legacy entries to migrate
+  if (state.entries && state.entries.length > 0 && (!state.scenarios || state.scenarios.length === 0 || !state.scenarios[0].entries || state.scenarios[0].entries.length === 0)) {
+    // Migrate: create base scenario with existing entries
+    state.scenarios = [
+      {
+        id: 'base',
+        name: 'Base Scenario',
+        isBase: true,
+        entries: JSON.parse(JSON.stringify(state.entries))
+      }
+    ];
+    state.activeScenarioId = 'base';
+    // Clear legacy entries
+    state.entries = [];
+    saveState();
+  }
+
+  // Ensure we have at least the base scenario
+  if (!state.scenarios || state.scenarios.length === 0) {
+    state.scenarios = [
+      {
+        id: 'base',
+        name: 'Base Scenario',
+        isBase: true,
+        entries: []
+      }
+    ];
+    state.activeScenarioId = 'base';
+  }
+}
+
 // ==================== CALCULATED ENTRY HELPERS ====================
 
 // Check if an entry is a calculated entry
@@ -61,14 +425,15 @@ function hasCalculationConfig(entry) {
 function getSourceEntries(entry) {
   if (!entry.calculationType) return [];
 
+  const entries = getActiveEntries();
   if (entry.sourceMode === 'all_of_type' && entry.sourceType) {
-    return state.entries.filter(e =>
+    return entries.filter(e =>
       e.type === entry.sourceType && !hasCalculationConfig(e)
     );
   }
 
   if (entry.sourceEntryIds && entry.sourceEntryIds.length > 0) {
-    return state.entries.filter(e => entry.sourceEntryIds.includes(e.id));
+    return entries.filter(e => entry.sourceEntryIds.includes(e.id));
   }
 
   return [];
@@ -76,7 +441,7 @@ function getSourceEntries(entry) {
 
 // Get entries that can be used as sources (non-calculated entries only)
 function getAvailableSourceEntries(excludeId = null) {
-  return state.entries.filter(e =>
+  return getActiveEntries().filter(e =>
     !hasCalculationConfig(e) && e.id !== excludeId
   );
 }
@@ -125,7 +490,7 @@ function hasOrphanedSources(entry) {
   if (!entry.calculationType || entry.sourceMode === 'all_of_type') return false;
   if (!entry.sourceEntryIds || entry.sourceEntryIds.length === 0) return true;
 
-  const existingIds = new Set(state.entries.map(e => e.id));
+  const existingIds = new Set(getActiveEntries().map(e => e.id));
   return entry.sourceEntryIds.some(id => !existingIds.has(id));
 }
 
@@ -357,8 +722,9 @@ function calculateEntryAmount(calcEntry, sourceOccurrences, periodStart, periodE
 
 // Get source occurrences for a date based on the source period setting
 function getSourceOccurrencesForDate(calcEntry, baseExpanded, targetDate, startDate, endDate) {
+  const entries = getActiveEntries();
   const sourceEntryIds = calcEntry.sourceMode === 'all_of_type'
-    ? state.entries.filter(e => e.type === calcEntry.sourceType && !hasCalculationConfig(e)).map(e => e.id)
+    ? entries.filter(e => e.type === calcEntry.sourceType && !hasCalculationConfig(e)).map(e => e.id)
     : (calcEntry.sourceEntryIds || []);
 
   const targetDateObj = new Date(targetDate + 'T12:00:00');
@@ -562,8 +928,9 @@ function expandCalculatedEntry(calcEntry, baseExpanded, startDate, endDate) {
   if (errors.length > 0) return expanded;
 
   // Get all source entry IDs
+  const entries = getActiveEntries();
   const sourceEntryIds = calcEntry.sourceMode === 'all_of_type'
-    ? state.entries.filter(e => e.type === calcEntry.sourceType && !hasCalculationConfig(e)).map(e => e.id)
+    ? entries.filter(e => e.type === calcEntry.sourceType && !hasCalculationConfig(e)).map(e => e.id)
     : (calcEntry.sourceEntryIds || []);
 
   // Get unique dates from source occurrences
@@ -613,7 +980,7 @@ function expandCalculatedEntry(calcEntry, baseExpanded, startDate, endDate) {
   return expanded;
 }
 
-function expandEntries(entries, daysToForecast = 30, customStartDate = null, customEndDate = null) {
+function expandEntries(entryList, daysToForecast = 30, customStartDate = null, customEndDate = null) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -632,13 +999,13 @@ function expandEntries(entries, daysToForecast = 30, customStartDate = null, cus
 
   // PASS 1: Expand all non-calculated entries
   const baseExpanded = [];
-  entries.filter(e => !isCalculatedEntry(e)).forEach(entry => {
+  entryList.filter(e => !isCalculatedEntry(e)).forEach(entry => {
     baseExpanded.push(...expandSingleEntry(entry, startDate, endDate));
   });
 
   // PASS 2: Expand calculated entries using base expanded data
   const calculatedExpanded = [];
-  entries.filter(e => isCalculatedEntry(e)).forEach(entry => {
+  entryList.filter(e => isCalculatedEntry(e)).forEach(entry => {
     calculatedExpanded.push(...expandCalculatedEntry(entry, baseExpanded, startDate, endDate));
   });
 
@@ -648,7 +1015,7 @@ function expandEntries(entries, daysToForecast = 30, customStartDate = null, cus
 }
 
 function calculateForecast(daysToForecast = 30, customStartDate = null, customEndDate = null) {
-  const expandedEntries = expandEntries(state.entries, daysToForecast, customStartDate, customEndDate);
+  const expandedEntries = expandEntries(getActiveEntries(), daysToForecast, customStartDate, customEndDate);
   let runningBalance = state.currentCash;
   let runningLocBalance = state.locBalance;
   let locDrawRequired = false;
@@ -773,6 +1140,8 @@ function render() {
     state.timelineCustomEnd
   );
 
+  renderScenarioSelector();
+  updateScenarioBanners();
   renderMetrics(dashboardForecast);
   renderLOCAlert(dashboardForecast);
   renderChart(timelineForecast);
@@ -1221,7 +1590,7 @@ function renderEntries() {
 
   const sortedEntryData = getSortedEntriesForDisplay();
 
-  const existingIds = new Set(state.entries.map(e => e.id));
+  const existingIds = new Set(getActiveEntries().map(e => e.id));
   selectedEntries = new Set([...selectedEntries].filter(id => existingIds.has(id)));
 
   // Pagination
@@ -1286,7 +1655,7 @@ function renderEntries() {
       const isOrphaned = hasOrphanedSources(entry);
 
       if (isOrphaned) {
-        calcIndicator = `<span class="orphaned-warning" title="Source item missing">⚠ Missing source</span><button class="btn btn-link fix-link-btn" onclick="event.stopPropagation(); startEdit(${entry.id})">Fix</button>`;
+        calcIndicator = `<span class="orphaned-warning" title="Source item missing">⚠ Missing source</span><button class="btn btn-link fix-link-btn" onclick="event.stopPropagation(); editEntry(${entry.id})">Fix</button>`;
       } else if (entry.manualOverride) {
         calcIndicator = `<span class="calc-indicator" title="${calcDesc}"><span class="calc-indicator-icon">📊</span> ${calcDesc}</span><span class="override-indicator" title="Using manual override">overridden</span>`;
       } else {
@@ -1379,7 +1748,7 @@ function changeEntryDisplayMode() {
 
 // Sort entries for grouped display - sources first, then their calculated children
 function getSortedEntriesForDisplay() {
-  const entries = [...state.entries];
+  const entries = [...getActiveEntries()];
 
   if (state.entryDisplayMode === 'grouped') {
     // Build a map of source -> calculated entries
@@ -1728,7 +2097,7 @@ function resetForm() {
 }
 
 function editEntry(id) {
-  const entry = state.entries.find(e => e.id === id);
+  const entry = getActiveEntries().find(e => e.id === id);
   if (!entry) return;
 
   editingEntryId = id;
@@ -1826,13 +2195,14 @@ function submitEntry() {
     }
   }
 
+  const scenario = getActiveScenario();
   if (editingEntryId !== null) {
-    const index = state.entries.findIndex(e => e.id === editingEntryId);
+    const index = scenario.entries.findIndex(e => e.id === editingEntryId);
     if (index !== -1) {
-      state.entries[index] = { ...entryData, id: editingEntryId };
+      scenario.entries[index] = { ...entryData, id: editingEntryId };
     }
   } else {
-    state.entries.push({ ...entryData, id: Date.now() });
+    scenario.entries.push({ ...entryData, id: Date.now() });
   }
 
   saveState();
@@ -2258,14 +2628,16 @@ function resetCalculationForm() {
 }
 
 function deleteEntry(id) {
-  state.entries = state.entries.filter(e => e.id !== id);
+  const scenario = getActiveScenario();
+  scenario.entries = scenario.entries.filter(e => e.id !== id);
   selectedEntries.delete(id);
   saveState();
   render();
 }
 
 function duplicateEntry(id) {
-  const entry = state.entries.find(e => e.id === id);
+  const scenario = getActiveScenario();
+  const entry = scenario.entries.find(e => e.id === id);
   if (!entry) return;
 
   // Create a copy with a new ID and "(Copy)" suffix
@@ -2275,7 +2647,7 @@ function duplicateEntry(id) {
     description: entry.description + ' (Copy)'
   };
 
-  state.entries.push(newEntry);
+  scenario.entries.push(newEntry);
   saveState();
   render();
 }
@@ -2290,7 +2662,7 @@ function toggleEntrySelection(id) {
 }
 
 function toggleSelectAll() {
-  const allIds = state.entries.map(e => e.id);
+  const allIds = getActiveEntries().map(e => e.id);
   const allSelected = allIds.every(id => selectedEntries.has(id));
 
   if (allSelected) {
@@ -2307,7 +2679,7 @@ function clearSelection() {
 }
 
 function confirmSingleDelete(id) {
-  const entry = state.entries.find(e => e.id === id);
+  const entry = getActiveEntries().find(e => e.id === id);
   if (!entry) return;
 
   showConfirmModal(
@@ -2335,7 +2707,8 @@ function confirmBatchDelete() {
 }
 
 function executeBatchDelete() {
-  state.entries = state.entries.filter(e => !selectedEntries.has(e.id));
+  const scenario = getActiveScenario();
+  scenario.entries = scenario.entries.filter(e => !selectedEntries.has(e.id));
   selectedEntries.clear();
   saveState();
   render();
@@ -2419,6 +2792,16 @@ function confirmClearAll() {
         timelineCurrentPage: 1,
         entriesItemsPerPage: 50,
         entriesCurrentPage: 1,
+        entryDisplayMode: 'grouped',
+        activeScenarioId: 'base',
+        scenarios: [
+          {
+            id: 'base',
+            name: 'Base Scenario',
+            isBase: true,
+            entries: []
+          }
+        ],
         entries: []
       };
 
@@ -2441,7 +2824,7 @@ function analyzeCleanup() {
   const toRollForward = [];
   const unchanged = [];
 
-  state.entries.forEach(entry => {
+  getActiveEntries().forEach(entry => {
     const entryDate = new Date(entry.date + 'T12:00:00');
 
     if (entry.frequency === 'once') {
@@ -2708,7 +3091,8 @@ function executeCleanup(analysis) {
   const deletedIds = new Set(toDelete.map(e => e.id));
   const rollForwardMap = new Map(toRollForward.map(e => [e.original.id, e.updated]));
 
-  state.entries = state.entries
+  const scenario = getActiveScenario();
+  scenario.entries = scenario.entries
     .filter(e => !deletedIds.has(e.id))
     .map(e => rollForwardMap.get(e.id) || e);
 
@@ -2720,6 +3104,7 @@ function executeCleanup(analysis) {
 // ==================== INIT ====================
 document.addEventListener('DOMContentLoaded', function() {
   loadState();
+  migrateToScenarios();
   checkSetupStatus();
   render();
 });
