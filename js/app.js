@@ -3114,6 +3114,931 @@ function executeCleanup(analysis) {
   hideCleanupModal();
 }
 
+// ==================== SPREADSHEET IMPORT/EXPORT ====================
+
+// State for import process
+let importState = {
+  currentStep: 1,
+  fileData: null,
+  headers: [],
+  rows: [],
+  columnMapping: {},
+  parsedEntries: [],
+  duplicates: [],
+  pendingImport: null
+};
+
+// Show export modal
+function showSpreadsheetExportModal() {
+  const modal = document.getElementById('spreadsheetExportModal');
+  modal.classList.remove('hidden');
+
+  // Populate scenario dropdown
+  const scenarioSelect = document.getElementById('exportScenario');
+  scenarioSelect.innerHTML = state.scenarios.map(s =>
+    `<option value="${s.id}" ${s.id === state.activeScenarioId ? 'selected' : ''}>${s.name}</option>`
+  ).join('');
+
+  // Set default date range (today to 2 years from now)
+  const today = new Date();
+  const twoYearsLater = new Date(today);
+  twoYearsLater.setFullYear(twoYearsLater.getFullYear() + 2);
+
+  document.getElementById('exportStartDate').value = today.toISOString().split('T')[0];
+  document.getElementById('exportEndDate').value = twoYearsLater.toISOString().split('T')[0];
+
+  // Add event listeners for preview updates
+  scenarioSelect.onchange = updateExportPreview;
+  document.getElementById('exportStartDate').onchange = updateExportPreview;
+  document.getElementById('exportEndDate').onchange = updateExportPreview;
+
+  updateExportPreview();
+}
+
+function hideSpreadsheetExportModal() {
+  document.getElementById('spreadsheetExportModal').classList.add('hidden');
+}
+
+// Update export preview with stats
+function updateExportPreview() {
+  const scenarioId = document.getElementById('exportScenario').value;
+  const startDate = document.getElementById('exportStartDate').value;
+  const endDate = document.getElementById('exportEndDate').value;
+
+  if (!startDate || !endDate) {
+    document.getElementById('exportPreviewStats').innerHTML = 'Please select a date range';
+    return;
+  }
+
+  const scenario = state.scenarios.find(s => s.id === scenarioId);
+  if (!scenario) return;
+
+  // Generate preview data
+  const exportData = generateExportData(scenario, startDate, endDate);
+
+  const revenueCount = exportData.filter(r => r.type === 'revenue').length;
+  const expenseCount = exportData.filter(r => r.type === 'expense').length;
+  const locCount = exportData.filter(r => r.type === 'loc_draw' || r.type === 'loc_paydown').length;
+  const calculatedCount = exportData.filter(r => r.isCalculated).length;
+
+  document.getElementById('exportPreviewStats').innerHTML = `
+    <div class="stat-row">
+      <span class="stat-label">Total Entries</span>
+      <span class="stat-value">${exportData.length}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Income Entries</span>
+      <span class="stat-value">${revenueCount}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Expense Entries</span>
+      <span class="stat-value">${expenseCount}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">LOC Entries</span>
+      <span class="stat-value">${locCount}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Calculated Entries</span>
+      <span class="stat-value">${calculatedCount}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Starting Cash</span>
+      <span class="stat-value">${formatCurrency(state.currentCash)}</span>
+    </div>
+  `;
+}
+
+// Generate export data with expanded entries
+function generateExportData(scenario, startDateStr, endDateStr) {
+  const startDate = new Date(startDateStr + 'T00:00:00');
+  const endDate = new Date(endDateStr + 'T23:59:59');
+  const twoYearsFromStart = new Date(startDate);
+  twoYearsFromStart.setFullYear(twoYearsFromStart.getFullYear() + 2);
+
+  const entries = scenario.entries || [];
+  const expandedEntries = [];
+
+  // Expand all entries
+  entries.forEach(entry => {
+    if (entry.frequency === 'once') {
+      const entryDate = new Date(entry.date + 'T12:00:00');
+      if (entryDate >= startDate && entryDate <= endDate) {
+        expandedEntries.push({
+          ...entry,
+          isCalculated: !!entry.calculationType
+        });
+      }
+    } else {
+      // Recurring entry - expand occurrences
+      let currentDate = new Date(entry.date + 'T12:00:00');
+      let occurrenceCount = 0;
+      const maxOccurrences = entry.endOccurrences || Infinity;
+
+      // For entries without end date, use 2 years from start or original end date
+      let effectiveEndDate = endDate;
+      if (entry.endDate) {
+        effectiveEndDate = new Date(entry.endDate + 'T23:59:59');
+        if (effectiveEndDate > endDate) effectiveEndDate = endDate;
+      } else {
+        // No end date - cap at 2 years from entry start or export end, whichever is sooner
+        const twoYearsFromEntry = new Date(entry.date + 'T12:00:00');
+        twoYearsFromEntry.setFullYear(twoYearsFromEntry.getFullYear() + 2);
+        effectiveEndDate = twoYearsFromEntry < endDate ? twoYearsFromEntry : endDate;
+      }
+
+      while (currentDate <= effectiveEndDate && occurrenceCount < maxOccurrences) {
+        if (currentDate >= startDate) {
+          expandedEntries.push({
+            ...entry,
+            date: currentDate.toISOString().split('T')[0],
+            frequency: 'once', // Convert to one-time in export
+            originalFrequency: entry.frequency,
+            isCalculated: !!entry.calculationType,
+            endDate: null,
+            endOccurrences: null
+          });
+        }
+        occurrenceCount++;
+        const nextDate = getNextOccurrence(currentDate, entry.frequency);
+        if (!nextDate) break;
+        currentDate = nextDate;
+      }
+    }
+  });
+
+  // Sort by date
+  expandedEntries.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  return expandedEntries;
+}
+
+// Execute export
+function executeSpreadsheetExport() {
+  const scenarioId = document.getElementById('exportScenario').value;
+  const startDate = document.getElementById('exportStartDate').value;
+  const endDate = document.getElementById('exportEndDate').value;
+  const format = document.getElementById('exportFormat').value;
+
+  const scenario = state.scenarios.find(s => s.id === scenarioId);
+  if (!scenario) {
+    alert('Please select a scenario');
+    return;
+  }
+
+  const exportData = generateExportData(scenario, startDate, endDate);
+
+  // Calculate running balance
+  let runningBalance = state.currentCash;
+  let runningLocBalance = state.locBalance;
+
+  const exportRows = exportData.map(entry => {
+    let amount = entry.amount || 0;
+
+    // For calculated entries, we need to calculate the amount
+    // (In a simplified export, we'll use the stored amount or 0)
+    if (entry.isCalculated && entry.amount === null) {
+      amount = 0; // Calculated entries without override will show 0
+    }
+
+    // Update running balance based on type
+    if (entry.type === 'revenue') {
+      runningBalance += amount;
+    } else if (entry.type === 'expense') {
+      runningBalance -= amount;
+    } else if (entry.type === 'loc_draw') {
+      runningBalance += amount;
+      runningLocBalance += amount;
+    } else if (entry.type === 'loc_paydown') {
+      runningBalance -= amount;
+      runningLocBalance -= amount;
+    }
+
+    return {
+      Date: entry.date,
+      Description: entry.description,
+      Type: formatExportType(entry.type),
+      Amount: amount,
+      'Running Balance': Math.round(runningBalance * 100) / 100,
+      'LOC Balance': Math.round(runningLocBalance * 100) / 100,
+      'Is Calculated': entry.isCalculated ? 'Yes' : 'No',
+      'Original Frequency': entry.originalFrequency ? frequencyLabels[entry.originalFrequency] : 'One-time'
+    };
+  });
+
+  if (format === 'csv') {
+    downloadCSV(exportRows, scenario.name);
+  } else {
+    downloadXLSX(exportRows, scenario.name);
+  }
+
+  hideSpreadsheetExportModal();
+}
+
+function formatExportType(type) {
+  const typeMap = {
+    'revenue': 'Income',
+    'expense': 'Expense',
+    'loc_draw': 'LOC Draw',
+    'loc_paydown': 'LOC Paydown'
+  };
+  return typeMap[type] || type;
+}
+
+// CSV Export
+function downloadCSV(data, scenarioName) {
+  if (data.length === 0) {
+    alert('No data to export');
+    return;
+  }
+
+  const headers = Object.keys(data[0]);
+  const csvContent = [
+    headers.join(','),
+    ...data.map(row => headers.map(h => {
+      let val = row[h];
+      if (typeof val === 'string' && (val.includes(',') || val.includes('"') || val.includes('\n'))) {
+        val = '"' + val.replace(/"/g, '""') + '"';
+      }
+      return val;
+    }).join(','))
+  ].join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const timestamp = new Date().toISOString().split('T')[0];
+  a.download = `cashflow-${scenarioName.replace(/\s+/g, '-')}-${timestamp}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// XLSX Export (simple implementation without external library)
+function downloadXLSX(data, scenarioName) {
+  if (data.length === 0) {
+    alert('No data to export');
+    return;
+  }
+
+  // Build XML for xlsx (simplified - creates a basic Excel XML file)
+  const headers = Object.keys(data[0]);
+
+  let xmlContent = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  xmlContent += '<?mso-application progid="Excel.Sheet"?>\n';
+  xmlContent += '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"\n';
+  xmlContent += '  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n';
+  xmlContent += '  <Styles>\n';
+  xmlContent += '    <Style ss:ID="Header"><Font ss:Bold="1"/><Interior ss:Color="#E8E4E0" ss:Pattern="Solid"/></Style>\n';
+  xmlContent += '    <Style ss:ID="Currency"><NumberFormat ss:Format="&quot;$&quot;#,##0.00"/></Style>\n';
+  xmlContent += '    <Style ss:ID="Date"><NumberFormat ss:Format="yyyy-mm-dd"/></Style>\n';
+  xmlContent += '  </Styles>\n';
+  xmlContent += '  <Worksheet ss:Name="Cash Flow">\n';
+  xmlContent += '    <Table>\n';
+
+  // Header row
+  xmlContent += '      <Row>\n';
+  headers.forEach(h => {
+    xmlContent += `        <Cell ss:StyleID="Header"><Data ss:Type="String">${escapeXml(h)}</Data></Cell>\n`;
+  });
+  xmlContent += '      </Row>\n';
+
+  // Data rows
+  data.forEach(row => {
+    xmlContent += '      <Row>\n';
+    headers.forEach(h => {
+      const val = row[h];
+      if (typeof val === 'number') {
+        const style = (h.includes('Balance') || h === 'Amount') ? ' ss:StyleID="Currency"' : '';
+        xmlContent += `        <Cell${style}><Data ss:Type="Number">${val}</Data></Cell>\n`;
+      } else {
+        xmlContent += `        <Cell><Data ss:Type="String">${escapeXml(String(val))}</Data></Cell>\n`;
+      }
+    });
+    xmlContent += '      </Row>\n';
+  });
+
+  xmlContent += '    </Table>\n';
+  xmlContent += '  </Worksheet>\n';
+  xmlContent += '</Workbook>';
+
+  const blob = new Blob([xmlContent], { type: 'application/vnd.ms-excel' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const timestamp = new Date().toISOString().split('T')[0];
+  a.download = `cashflow-${scenarioName.replace(/\s+/g, '-')}-${timestamp}.xls`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escapeXml(str) {
+  return str.replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;');
+}
+
+// ==================== IMPORT FUNCTIONS ====================
+
+function showSpreadsheetImportModal() {
+  // Reset import state
+  importState = {
+    currentStep: 1,
+    fileData: null,
+    headers: [],
+    rows: [],
+    columnMapping: {},
+    parsedEntries: [],
+    duplicates: [],
+    pendingImport: null
+  };
+
+  const modal = document.getElementById('spreadsheetImportModal');
+  modal.classList.remove('hidden');
+
+  // Populate target scenario dropdown
+  const scenarioSelect = document.getElementById('importTargetScenario');
+  scenarioSelect.innerHTML = state.scenarios.map(s =>
+    `<option value="${s.id}" ${s.id === state.activeScenarioId ? 'selected' : ''}>${s.name}</option>`
+  ).join('');
+
+  // Show step 1, hide others
+  updateImportStepVisibility();
+  updateImportButtons();
+
+  // Reset file input
+  document.getElementById('spreadsheetFile').value = '';
+  document.getElementById('selectedFileName').classList.add('hidden');
+
+  // Setup drag and drop
+  setupDragAndDrop();
+}
+
+function hideSpreadsheetImportModal() {
+  document.getElementById('spreadsheetImportModal').classList.add('hidden');
+  importState = {
+    currentStep: 1,
+    fileData: null,
+    headers: [],
+    rows: [],
+    columnMapping: {},
+    parsedEntries: [],
+    duplicates: [],
+    pendingImport: null
+  };
+}
+
+function setupDragAndDrop() {
+  const dropZone = document.getElementById('fileDropZone');
+
+  dropZone.ondragover = (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  };
+
+  dropZone.ondragleave = () => {
+    dropZone.classList.remove('drag-over');
+  };
+
+  dropZone.ondrop = (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      processImportFile(files[0]);
+    }
+  };
+}
+
+function handleSpreadsheetFile(event) {
+  const file = event.target.files[0];
+  if (file) {
+    processImportFile(file);
+  }
+}
+
+function processImportFile(file) {
+  const fileName = file.name.toLowerCase();
+
+  if (!fileName.endsWith('.csv') && !fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
+    alert('Please select a CSV or Excel file');
+    return;
+  }
+
+  // Show selected file
+  document.getElementById('selectedFileName').innerHTML = `
+    <span class="selected-file-icon">📄</span>
+    <span class="selected-file-name">${file.name}</span>
+    <button class="selected-file-remove" onclick="removeSelectedFile()">×</button>
+  `;
+  document.getElementById('selectedFileName').classList.remove('hidden');
+
+  const reader = new FileReader();
+
+  if (fileName.endsWith('.csv')) {
+    reader.onload = (e) => {
+      parseCSV(e.target.result);
+    };
+    reader.readAsText(file);
+  } else {
+    reader.onload = (e) => {
+      parseXLSX(e.target.result);
+    };
+    reader.readAsText(file);
+  }
+}
+
+function removeSelectedFile() {
+  document.getElementById('spreadsheetFile').value = '';
+  document.getElementById('selectedFileName').classList.add('hidden');
+  importState.fileData = null;
+  importState.headers = [];
+  importState.rows = [];
+}
+
+function parseCSV(content) {
+  const lines = content.split('\n').filter(line => line.trim());
+  if (lines.length < 2) {
+    alert('CSV file must have at least a header row and one data row');
+    return;
+  }
+
+  // Parse header
+  importState.headers = parseCSVLine(lines[0]);
+
+  // Parse data rows
+  importState.rows = lines.slice(1).map(line => parseCSVLine(line)).filter(row => row.some(cell => cell.trim()));
+
+  importState.fileData = content;
+
+  // Auto-detect column mapping
+  autoDetectColumnMapping();
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+
+  return result;
+}
+
+function parseXLSX(content) {
+  // Simple XML parsing for Excel XML format
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(content, 'text/xml');
+
+    const rows = doc.querySelectorAll('Row');
+    if (rows.length < 2) {
+      alert('Excel file must have at least a header row and one data row');
+      return;
+    }
+
+    // Parse header
+    const headerCells = rows[0].querySelectorAll('Cell Data');
+    importState.headers = Array.from(headerCells).map(cell => cell.textContent.trim());
+
+    // Parse data rows
+    importState.rows = [];
+    for (let i = 1; i < rows.length; i++) {
+      const cells = rows[i].querySelectorAll('Cell Data');
+      const rowData = Array.from(cells).map(cell => cell.textContent.trim());
+      if (rowData.some(cell => cell)) {
+        importState.rows.push(rowData);
+      }
+    }
+
+    importState.fileData = content;
+    autoDetectColumnMapping();
+  } catch (e) {
+    // Fallback: try parsing as CSV (some .xls files are actually CSV)
+    parseCSV(content);
+  }
+}
+
+function autoDetectColumnMapping() {
+  const mapping = {
+    date: -1,
+    description: -1,
+    type: -1,
+    amount: -1
+  };
+
+  importState.headers.forEach((header, index) => {
+    const h = header.toLowerCase();
+    if (h.includes('date') && mapping.date === -1) mapping.date = index;
+    if ((h.includes('description') || h.includes('desc') || h.includes('name') || h.includes('memo')) && mapping.description === -1) mapping.description = index;
+    if ((h.includes('type') || h.includes('category')) && mapping.type === -1) mapping.type = index;
+    if ((h.includes('amount') || h.includes('value') || h.includes('total')) && mapping.amount === -1) mapping.amount = index;
+  });
+
+  importState.columnMapping = mapping;
+}
+
+function updateImportStepVisibility() {
+  document.getElementById('importStep1').classList.toggle('hidden', importState.currentStep !== 1);
+  document.getElementById('importStep2').classList.toggle('hidden', importState.currentStep !== 2);
+  document.getElementById('importStep3').classList.toggle('hidden', importState.currentStep !== 3);
+}
+
+function updateImportButtons() {
+  const backBtn = document.getElementById('importBackBtn');
+  const nextBtn = document.getElementById('importNextBtn');
+
+  backBtn.classList.toggle('hidden', importState.currentStep === 1);
+
+  if (importState.currentStep === 3) {
+    nextBtn.textContent = 'Import';
+  } else {
+    nextBtn.textContent = 'Next';
+  }
+}
+
+function importStepNext() {
+  if (importState.currentStep === 1) {
+    // Validate file is selected
+    if (!importState.headers.length) {
+      alert('Please select a file first');
+      return;
+    }
+    importState.currentStep = 2;
+    renderColumnMapping();
+    renderImportPreview();
+  } else if (importState.currentStep === 2) {
+    // Validate column mapping
+    if (importState.columnMapping.date === -1 || importState.columnMapping.description === -1) {
+      alert('Please map the Date and Description columns');
+      return;
+    }
+    importState.currentStep = 3;
+    parseEntriesFromMapping();
+    renderImportSummary();
+  } else if (importState.currentStep === 3) {
+    executeImport();
+  }
+
+  updateImportStepVisibility();
+  updateImportButtons();
+}
+
+function importStepBack() {
+  if (importState.currentStep > 1) {
+    importState.currentStep--;
+    updateImportStepVisibility();
+    updateImportButtons();
+  }
+}
+
+function renderColumnMapping() {
+  const container = document.getElementById('columnMappingArea');
+  const fields = [
+    { key: 'date', label: 'Date', required: true },
+    { key: 'description', label: 'Description', required: true },
+    { key: 'type', label: 'Type', required: false },
+    { key: 'amount', label: 'Amount', required: false }
+  ];
+
+  container.innerHTML = fields.map(field => {
+    const options = ['<option value="-1">-- Skip --</option>'];
+    importState.headers.forEach((h, i) => {
+      const selected = importState.columnMapping[field.key] === i ? 'selected' : '';
+      options.push(`<option value="${i}" ${selected}>${h}</option>`);
+    });
+
+    return `
+      <div class="mapping-item">
+        <div class="mapping-label ${field.required ? 'required' : ''}">${field.label}</div>
+        <select class="mapping-select" onchange="updateColumnMapping('${field.key}', this.value)">
+          ${options.join('')}
+        </select>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateColumnMapping(field, value) {
+  importState.columnMapping[field] = parseInt(value);
+  renderImportPreview();
+}
+
+function renderImportPreview() {
+  const container = document.getElementById('importPreviewTable');
+  const previewRows = importState.rows.slice(0, 5);
+
+  if (previewRows.length === 0) {
+    container.innerHTML = '<p>No data to preview</p>';
+    return;
+  }
+
+  let html = '<table class="preview-table"><thead><tr>';
+  importState.headers.forEach(h => {
+    html += `<th>${escapeHtml(h)}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  previewRows.forEach(row => {
+    html += '<tr>';
+    row.forEach((cell, i) => {
+      html += `<td>${escapeHtml(cell || '')}</td>`;
+    });
+    // Pad with empty cells if row is shorter than headers
+    for (let i = row.length; i < importState.headers.length; i++) {
+      html += '<td></td>';
+    }
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function parseEntriesFromMapping() {
+  const { date, description, type, amount } = importState.columnMapping;
+
+  importState.parsedEntries = importState.rows.map((row, index) => {
+    const dateVal = date >= 0 ? row[date] : null;
+    const descVal = description >= 0 ? row[description] : 'Imported Entry';
+    const typeVal = type >= 0 ? row[type] : 'expense';
+    const amountVal = amount >= 0 ? row[amount] : 0;
+
+    // Parse date
+    let parsedDate = parseImportDate(dateVal);
+    if (!parsedDate) {
+      parsedDate = new Date().toISOString().split('T')[0];
+    }
+
+    // Parse type
+    let parsedType = parseImportType(typeVal);
+
+    // Parse amount
+    let parsedAmount = parseImportAmount(amountVal);
+
+    return {
+      id: Date.now() + index,
+      date: parsedDate,
+      description: descVal || 'Imported Entry',
+      type: parsedType,
+      amount: Math.abs(parsedAmount),
+      frequency: 'once'
+    };
+  }).filter(entry => entry.date && entry.description);
+}
+
+function parseImportDate(dateStr) {
+  if (!dateStr) return null;
+
+  // Try various date formats
+  const formats = [
+    // ISO format
+    /^(\d{4})-(\d{2})-(\d{2})$/,
+    // US format
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/,
+    /^(\d{1,2})\/(\d{1,2})\/(\d{2})$/,
+    // European format
+    /^(\d{1,2})-(\d{1,2})-(\d{4})$/
+  ];
+
+  // Try ISO first
+  let match = dateStr.match(formats[0]);
+  if (match) {
+    return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+  }
+
+  // Try US format MM/DD/YYYY
+  match = dateStr.match(formats[1]);
+  if (match) {
+    return `${match[3]}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`;
+  }
+
+  // Try US format MM/DD/YY
+  match = dateStr.match(formats[2]);
+  if (match) {
+    const year = parseInt(match[3]) > 50 ? '19' + match[3] : '20' + match[3];
+    return `${year}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`;
+  }
+
+  // Fallback: try Date constructor
+  try {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      return d.toISOString().split('T')[0];
+    }
+  } catch (e) {}
+
+  return null;
+}
+
+function parseImportType(typeStr) {
+  if (!typeStr) return 'expense';
+
+  const t = typeStr.toLowerCase().trim();
+
+  if (t.includes('income') || t.includes('revenue') || t.includes('credit') || t === 'in') {
+    return 'revenue';
+  }
+  if (t.includes('loc draw') || t.includes('draw') || t.includes('borrow')) {
+    return 'loc_draw';
+  }
+  if (t.includes('loc pay') || t.includes('paydown') || t.includes('repay')) {
+    return 'loc_paydown';
+  }
+
+  return 'expense';
+}
+
+function parseImportAmount(amountStr) {
+  if (!amountStr) return 0;
+  if (typeof amountStr === 'number') return amountStr;
+
+  // Remove currency symbols, commas, spaces
+  const cleaned = String(amountStr).replace(/[$,\s]/g, '').replace(/[()]/g, '-');
+  const num = parseFloat(cleaned);
+
+  return isNaN(num) ? 0 : num;
+}
+
+function renderImportSummary() {
+  const container = document.getElementById('importSummary');
+  const entries = importState.parsedEntries;
+
+  const revenueCount = entries.filter(e => e.type === 'revenue').length;
+  const expenseCount = entries.filter(e => e.type === 'expense').length;
+  const locCount = entries.filter(e => e.type === 'loc_draw' || e.type === 'loc_paydown').length;
+
+  const totalRevenue = entries.filter(e => e.type === 'revenue').reduce((sum, e) => sum + e.amount, 0);
+  const totalExpense = entries.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
+
+  container.innerHTML = `
+    <div class="import-summary-title">Import Summary</div>
+    <div class="import-summary-stats">
+      <div class="summary-stat">
+        <div class="summary-stat-value">${entries.length}</div>
+        <div class="summary-stat-label">Total Entries</div>
+      </div>
+      <div class="summary-stat">
+        <div class="summary-stat-value">${revenueCount}</div>
+        <div class="summary-stat-label">Income</div>
+      </div>
+      <div class="summary-stat">
+        <div class="summary-stat-value">${expenseCount}</div>
+        <div class="summary-stat-label">Expenses</div>
+      </div>
+      <div class="summary-stat">
+        <div class="summary-stat-value">${locCount}</div>
+        <div class="summary-stat-label">LOC</div>
+      </div>
+    </div>
+    <div style="margin-top: 16px; font-size: 14px; color: var(--text-secondary);">
+      <div>Total Income: <strong style="color: var(--accent-green);">${formatCurrency(totalRevenue)}</strong></div>
+      <div>Total Expenses: <strong style="color: var(--accent-coral);">${formatCurrency(totalExpense)}</strong></div>
+    </div>
+  `;
+}
+
+function executeImport() {
+  const targetScenarioId = document.getElementById('importTargetScenario').value;
+  const importMode = document.getElementById('importMode').value;
+
+  const scenario = state.scenarios.find(s => s.id === targetScenarioId);
+  if (!scenario) {
+    alert('Please select a target scenario');
+    return;
+  }
+
+  // Check for duplicates (same description + date)
+  const existingEntries = scenario.entries || [];
+  const duplicates = [];
+
+  if (importMode === 'append') {
+    importState.parsedEntries.forEach(newEntry => {
+      const existing = existingEntries.find(e =>
+        e.description.toLowerCase() === newEntry.description.toLowerCase() &&
+        e.date === newEntry.date
+      );
+      if (existing) {
+        duplicates.push({
+          existing,
+          new: newEntry
+        });
+      }
+    });
+  }
+
+  if (duplicates.length > 0) {
+    // Show duplicate handling modal
+    importState.duplicates = duplicates;
+    importState.pendingImport = {
+      scenarioId: targetScenarioId,
+      mode: importMode,
+      entries: importState.parsedEntries
+    };
+    showDuplicateHandlingModal();
+  } else {
+    // No duplicates, proceed with import
+    finalizeImport(targetScenarioId, importMode, importState.parsedEntries);
+  }
+}
+
+function showDuplicateHandlingModal() {
+  const modal = document.getElementById('duplicateHandlingModal');
+  modal.classList.remove('hidden');
+
+  document.getElementById('duplicateWarningText').innerHTML =
+    `<strong>${importState.duplicates.length} duplicate entries</strong> were found (same description and date). How would you like to handle them?`;
+
+  const list = document.getElementById('duplicateList');
+  list.innerHTML = importState.duplicates.slice(0, 10).map(d => `
+    <div class="duplicate-item">
+      <span class="duplicate-item-name">${escapeHtml(d.new.description)}</span>
+      <span class="duplicate-item-date">${d.new.date}</span>
+    </div>
+  `).join('') + (importState.duplicates.length > 10 ? `<div class="duplicate-item" style="color: var(--text-muted); font-style: italic;">...and ${importState.duplicates.length - 10} more</div>` : '');
+}
+
+function hideDuplicateHandlingModal() {
+  document.getElementById('duplicateHandlingModal').classList.add('hidden');
+}
+
+function handleDuplicates(action) {
+  const pending = importState.pendingImport;
+  if (!pending) return;
+
+  const scenario = state.scenarios.find(s => s.id === pending.scenarioId);
+  if (!scenario) return;
+
+  let entriesToImport = pending.entries;
+
+  if (action === 'skip') {
+    // Skip duplicates
+    const dupKeys = new Set(importState.duplicates.map(d => `${d.new.description.toLowerCase()}-${d.new.date}`));
+    entriesToImport = entriesToImport.filter(e =>
+      !dupKeys.has(`${e.description.toLowerCase()}-${e.date}`)
+    );
+  } else if (action === 'replace') {
+    // Remove existing duplicates first
+    const dupKeys = new Set(importState.duplicates.map(d => `${d.existing.description.toLowerCase()}-${d.existing.date}`));
+    scenario.entries = scenario.entries.filter(e =>
+      !dupKeys.has(`${e.description.toLowerCase()}-${e.date}`)
+    );
+  }
+  // action === 'keep' means keep both, so just add all
+
+  finalizeImport(pending.scenarioId, pending.mode, entriesToImport);
+  hideDuplicateHandlingModal();
+}
+
+function finalizeImport(scenarioId, mode, entries) {
+  const scenario = state.scenarios.find(s => s.id === scenarioId);
+  if (!scenario) return;
+
+  // Assign new IDs to entries
+  let nextId = Date.now();
+  entries = entries.map(e => ({
+    ...e,
+    id: nextId++
+  }));
+
+  if (mode === 'replace') {
+    scenario.entries = entries;
+  } else {
+    scenario.entries = [...scenario.entries, ...entries];
+  }
+
+  saveState();
+  render();
+  hideSpreadsheetImportModal();
+
+  alert(`Successfully imported ${entries.length} entries!`);
+}
+
 // ==================== INIT ====================
 document.addEventListener('DOMContentLoaded', function() {
   loadState();
