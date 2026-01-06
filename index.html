@@ -442,6 +442,177 @@
       </div>
     </div>
 
+    <!-- Spreadsheet Import/Export Section -->
+    <div class="card spreadsheet-section">
+      <div class="card-title">
+        <span>📊 Spreadsheet Import/Export</span>
+      </div>
+      <div class="spreadsheet-info">
+        <p>Export your projection items to a spreadsheet format (CSV/Excel) for review or editing in Excel, Google Sheets, or other spreadsheet software. Import data back from spreadsheets.</p>
+      </div>
+      <div class="spreadsheet-actions">
+        <button class="btn btn-primary" onclick="showSpreadsheetExportModal()">📤 Export to Spreadsheet</button>
+        <button class="btn btn-secondary" onclick="showSpreadsheetImportModal()">📥 Import from Spreadsheet</button>
+      </div>
+    </div>
+
+    <!-- Spreadsheet Export Modal -->
+    <div id="spreadsheetExportModal" class="modal hidden">
+      <div class="modal-overlay" onclick="hideSpreadsheetExportModal()"></div>
+      <div class="modal-content modal-large">
+        <div class="modal-header">
+          <h3>Export to Spreadsheet</h3>
+          <button class="modal-close" onclick="hideSpreadsheetExportModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="export-warning">
+            <div class="warning-icon">⚠️</div>
+            <div class="warning-text">
+              <strong>Important:</strong> Recurring items without an end date will be automatically ended after 2 years of occurrences in the export. Each recurring item will be expanded into individual one-time entries.
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="input-group">
+              <label>Scenario to Export</label>
+              <select class="input" id="exportScenario"></select>
+            </div>
+            <div class="input-group">
+              <label>File Format</label>
+              <select class="input" id="exportFormat">
+                <option value="csv">CSV (Universal)</option>
+                <option value="xlsx">Excel (XLSX)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="input-group">
+              <label>Start Date</label>
+              <input type="date" class="input" id="exportStartDate">
+            </div>
+            <div class="input-group">
+              <label>End Date</label>
+              <input type="date" class="input" id="exportEndDate">
+            </div>
+          </div>
+
+          <div class="export-preview">
+            <div class="preview-header">Export Preview</div>
+            <div class="preview-stats" id="exportPreviewStats">
+              Select options above to see export preview
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="hideSpreadsheetExportModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="executeSpreadsheetExport()">Export</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spreadsheet Import Modal -->
+    <div id="spreadsheetImportModal" class="modal hidden">
+      <div class="modal-overlay" onclick="hideSpreadsheetImportModal()"></div>
+      <div class="modal-content modal-large">
+        <div class="modal-header">
+          <h3>Import from Spreadsheet</h3>
+          <button class="modal-close" onclick="hideSpreadsheetImportModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <!-- Step 1: File Selection -->
+          <div id="importStep1" class="import-step">
+            <div class="step-header">
+              <span class="step-number">1</span>
+              <span class="step-title">Select File</span>
+            </div>
+            <div class="file-drop-zone" id="fileDropZone" onclick="document.getElementById('spreadsheetFile').click()">
+              <div class="drop-zone-icon">📁</div>
+              <div class="drop-zone-text">Click to select or drag & drop a CSV or Excel file</div>
+              <div class="drop-zone-hint">Supported formats: .csv, .xlsx</div>
+              <input type="file" id="spreadsheetFile" accept=".csv,.xlsx" onchange="handleSpreadsheetFile(event)" style="display: none;">
+            </div>
+            <div id="selectedFileName" class="selected-file hidden"></div>
+          </div>
+
+          <!-- Step 2: Column Mapping -->
+          <div id="importStep2" class="import-step hidden">
+            <div class="step-header">
+              <span class="step-number">2</span>
+              <span class="step-title">Map Columns</span>
+            </div>
+            <div class="mapping-info">
+              <p>Match your spreadsheet columns to the required fields. Date and Description are required.</p>
+            </div>
+            <div class="column-mapping" id="columnMappingArea">
+              <!-- Populated dynamically -->
+            </div>
+            <div class="data-preview">
+              <div class="preview-header">Data Preview (first 5 rows)</div>
+              <div class="preview-table-container" id="importPreviewTable">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3: Import Options -->
+          <div id="importStep3" class="import-step hidden">
+            <div class="step-header">
+              <span class="step-number">3</span>
+              <span class="step-title">Import Options</span>
+            </div>
+            <div class="form-grid">
+              <div class="input-group">
+                <label>Target Scenario</label>
+                <select class="input" id="importTargetScenario"></select>
+              </div>
+              <div class="input-group">
+                <label>Import Mode</label>
+                <select class="input" id="importMode" onchange="updateImportPreview()">
+                  <option value="append">Append to existing data</option>
+                  <option value="replace">Replace all existing data</option>
+                </select>
+              </div>
+            </div>
+            <div class="import-summary" id="importSummary">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="hideSpreadsheetImportModal()">Cancel</button>
+          <button class="btn btn-secondary hidden" id="importBackBtn" onclick="importStepBack()">Back</button>
+          <button class="btn btn-primary" id="importNextBtn" onclick="importStepNext()">Next</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Duplicate Handling Modal -->
+    <div id="duplicateHandlingModal" class="modal hidden">
+      <div class="modal-overlay"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Duplicates Found</h3>
+        </div>
+        <div class="modal-body">
+          <div class="duplicate-warning">
+            <div class="warning-icon">⚠️</div>
+            <div class="warning-text" id="duplicateWarningText">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+          <div class="duplicate-list" id="duplicateList">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="handleDuplicates('keep')">Keep Both</button>
+          <button class="btn btn-primary" onclick="handleDuplicates('replace')">Replace Existing</button>
+          <button class="btn btn-danger" onclick="handleDuplicates('skip')">Skip Duplicates</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Data Clean Up Section -->
     <div class="card data-cleanup-section">
       <div class="card-title">Data Clean Up</div>
