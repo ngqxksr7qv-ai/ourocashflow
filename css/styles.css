@@ -2247,6 +2247,35 @@ input[type="file"] {
   border-bottom: 1px solid var(--border-light);
 }
 
+/* Dashboard Scenario Indicator */
+.metrics-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dashboard-scenario-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: linear-gradient(135deg, #f3e8ff 0%, #ede4ff 100%);
+  border: 1px solid #9333ea;
+  border-radius: 20px;
+  font-size: 12px;
+  color: #7c3aed;
+  font-weight: 600;
+}
+
+.dashboard-scenario-icon {
+  font-size: 14px;
+}
+
+.dashboard-scenario-text strong {
+  color: #7c3aed;
+}
+
 /* Responsive help section */
 @media (max-width: 768px) {
   .help-title {

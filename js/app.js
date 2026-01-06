@@ -357,15 +357,28 @@ function hideScenarioModal() {
 // Update scenario warning banners
 function updateScenarioBanners() {
   const dashboardBanner = document.getElementById('scenarioWarningBanner');
+  const dashboardIndicator = document.getElementById('dashboardScenarioIndicator');
+  const dashboardScenarioName = document.getElementById('dashboardScenarioName');
   const isAlt = isAlternativeScenario();
   const scenario = getActiveScenario();
 
+  // Update main warning banner
   if (dashboardBanner) {
     if (isAlt && scenario) {
       dashboardBanner.classList.remove('hidden');
       dashboardBanner.querySelector('.scenario-banner-name').textContent = scenario.name;
     } else {
       dashboardBanner.classList.add('hidden');
+    }
+  }
+
+  // Update dashboard title indicator
+  if (dashboardIndicator && dashboardScenarioName) {
+    if (isAlt && scenario) {
+      dashboardIndicator.classList.remove('hidden');
+      dashboardScenarioName.textContent = scenario.name;
+    } else {
+      dashboardIndicator.classList.add('hidden');
     }
   }
 }

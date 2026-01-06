@@ -70,7 +70,13 @@
 
     <!-- Metrics -->
     <div class="metrics-header">
-      <div class="metrics-title">Dashboard</div>
+      <div class="metrics-title-row">
+        <span class="metrics-title">Dashboard</span>
+        <span id="dashboardScenarioIndicator" class="dashboard-scenario-indicator hidden">
+          <span class="dashboard-scenario-icon">🔮</span>
+          <span class="dashboard-scenario-text">Viewing: <strong id="dashboardScenarioName"></strong></span>
+        </span>
+      </div>
       <div class="metrics-timeframe">
         <span class="metrics-timeframe-label">Forecast period:</span>
         <select id="metricsTimeframe" onchange="updateMetricsTimeframe()">
