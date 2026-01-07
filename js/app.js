@@ -946,13 +946,72 @@ function expandCalculatedEntry(calcEntry, baseExpanded, startDate, endDate) {
     ? entries.filter(e => e.type === calcEntry.sourceType && !hasCalculationConfig(e)).map(e => e.id)
     : (calcEntry.sourceEntryIds || []);
 
-  // Get unique dates from source occurrences
+  const sourcePeriod = calcEntry.sourcePeriod || 'same_day';
+  const dateOffset = calcEntry.dateOffset || 0;
+
+  // For same_month and same_week, create ONE entry per period at the end of the period
+  if (sourcePeriod === 'same_month' || sourcePeriod === 'same_week') {
+    // Find all periods that have source occurrences
+    const periodsWithSources = new Map(); // key: period identifier, value: { periodEnd, sourceOccurrences }
+
+    baseExpanded.forEach(occ => {
+      if (!sourceEntryIds.includes(occ.originalId)) return;
+
+      const occDate = new Date(occ.date + 'T12:00:00');
+      let periodKey, periodEnd;
+
+      if (sourcePeriod === 'same_month') {
+        periodKey = `${occDate.getFullYear()}-${occDate.getMonth()}`;
+        periodEnd = new Date(occDate.getFullYear(), occDate.getMonth() + 1, 0);
+      } else { // same_week
+        // Get the Sunday of this week as the period key
+        const weekStart = new Date(occDate);
+        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+        periodKey = weekStart.toISOString().split('T')[0];
+        periodEnd = new Date(weekStart);
+        periodEnd.setDate(periodEnd.getDate() + 6);
+      }
+
+      if (!periodsWithSources.has(periodKey)) {
+        periodsWithSources.set(periodKey, { periodEnd, sourceOccurrences: [] });
+      }
+      periodsWithSources.get(periodKey).sourceOccurrences.push(occ);
+    });
+
+    // Create one entry per period at the period end (plus offset)
+    periodsWithSources.forEach(({ periodEnd, sourceOccurrences }) => {
+      // Apply date offset to the period end date
+      const entryDate = new Date(periodEnd);
+      entryDate.setDate(entryDate.getDate() + dateOffset);
+      const entryDateStr = entryDate.toISOString().split('T')[0];
+
+      // Only include if within forecast range
+      if (entryDate < startDate || entryDate > endDate) return;
+      if (sourceOccurrences.length === 0) return;
+
+      const amount = calculateEntryAmount(calcEntry, sourceOccurrences, null, null);
+
+      expanded.push({
+        ...calcEntry,
+        date: entryDateStr,
+        amount: amount,
+        originalId: calcEntry.id,
+        id: calcEntry.id + '-' + entryDateStr,
+        calculatedFrom: sourceOccurrences.map(o => o.originalId),
+        sourceAmount: sourceOccurrences.reduce((sum, o) => sum + o.amount, 0)
+      });
+    });
+
+    return expanded;
+  }
+
+  // For same_day and rolling_days, create an entry for each source occurrence date
   const sourceDates = new Set();
   baseExpanded.forEach(occ => {
     if (sourceEntryIds.includes(occ.originalId)) {
       // Apply date offset
       const offsetDate = new Date(occ.date + 'T12:00:00');
-      offsetDate.setDate(offsetDate.getDate() + (calcEntry.dateOffset || 0));
+      offsetDate.setDate(offsetDate.getDate() + dateOffset);
       const offsetDateStr = offsetDate.toISOString().split('T')[0];
 
       // Only include if within forecast range
@@ -967,7 +1026,7 @@ function expandCalculatedEntry(calcEntry, baseExpanded, startDate, endDate) {
     // Get source date (before offset) for looking up source amounts
     const calcDate = new Date(dateStr + 'T12:00:00');
     const sourceDate = new Date(calcDate);
-    sourceDate.setDate(sourceDate.getDate() - (calcEntry.dateOffset || 0));
+    sourceDate.setDate(sourceDate.getDate() - dateOffset);
     const sourceDateStr = sourceDate.toISOString().split('T')[0];
 
     // Get source occurrences for this period
