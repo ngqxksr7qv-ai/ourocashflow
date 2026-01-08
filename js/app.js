@@ -3,6 +3,19 @@ let state = {
   currentCash: 15000,
   locLimit: 50000,
   locBalance: 0,
+  // Teller bank connection
+  teller: {
+    connected: false,
+    accessToken: null,
+    enrollmentId: null,
+    institutionName: null,
+    accountId: null,
+    accountName: null,
+    accountType: null,
+    lastBalance: null,
+    lastUpdated: null,
+    useManualOverride: false
+  },
   timeRange: 30,
   timelineCustomStart: null,
   timelineCustomEnd: null,
@@ -422,6 +435,355 @@ function migrateToScenarios() {
   }
 }
 
+// ==================== TELLER BANK CONNECTION ====================
+
+// Teller application ID - users should replace with their own
+// Get one at https://teller.io/
+const TELLER_APPLICATION_ID = 'app_p9bf7fqk0fn4l4008'; // Demo/sandbox app ID
+
+let tellerConnect = null;
+
+// Initialize Teller Connect
+function initTellerConnect() {
+  if (typeof TellerConnect === 'undefined') {
+    console.warn('Teller Connect not loaded');
+    return;
+  }
+
+  tellerConnect = TellerConnect.setup({
+    applicationId: TELLER_APPLICATION_ID,
+    products: ['balance'],
+    onInit: function() {
+      console.log('Teller Connect initialized');
+    },
+    onSuccess: function(enrollment) {
+      handleTellerSuccess(enrollment);
+    },
+    onExit: function() {
+      console.log('Teller Connect closed');
+      renderBankConnectionUI();
+    }
+  });
+}
+
+// Open Teller Connect modal
+function openTellerConnect() {
+  if (!tellerConnect) {
+    initTellerConnect();
+  }
+
+  if (tellerConnect) {
+    // If we have an existing enrollment that needs repair, use it
+    if (state.teller.enrollmentId && state.teller.connected) {
+      tellerConnect = TellerConnect.setup({
+        applicationId: TELLER_APPLICATION_ID,
+        enrollmentId: state.teller.enrollmentId,
+        products: ['balance'],
+        onSuccess: function(enrollment) {
+          handleTellerSuccess(enrollment);
+        },
+        onExit: function() {
+          renderBankConnectionUI();
+        }
+      });
+    }
+    tellerConnect.open();
+  } else {
+    alert('Unable to load Teller Connect. Please check your internet connection and try again.');
+  }
+}
+
+// Handle successful Teller enrollment
+function handleTellerSuccess(enrollment) {
+  console.log('Teller enrollment successful:', enrollment);
+
+  // Store enrollment data
+  state.teller.connected = true;
+  state.teller.accessToken = enrollment.accessToken;
+  state.teller.enrollmentId = enrollment.enrollment?.id || null;
+  state.teller.institutionName = enrollment.enrollment?.institution?.name || 'Connected Bank';
+
+  // If we got accounts in the enrollment, use the first one
+  if (enrollment.accounts && enrollment.accounts.length > 0) {
+    const account = enrollment.accounts[0];
+    state.teller.accountId = account.id;
+    state.teller.accountName = account.name || 'Checking';
+    state.teller.accountType = account.type || 'depository';
+  }
+
+  saveState();
+  renderBankConnectionUI();
+
+  // Try to fetch the balance
+  refreshBankBalance();
+}
+
+// Refresh bank balance from Teller API
+async function refreshBankBalance() {
+  if (!state.teller.connected || !state.teller.accessToken) {
+    return;
+  }
+
+  // Show loading state
+  const statusDot = document.querySelector('.bank-status-dot');
+  const refreshBtn = document.getElementById('refreshBalanceBtn');
+  if (statusDot) statusDot.classList.add('refreshing');
+  if (refreshBtn) {
+    refreshBtn.textContent = 'Refreshing...';
+    refreshBtn.disabled = true;
+  }
+
+  try {
+    // Note: Direct browser calls to Teller API may be blocked by CORS.
+    // In production, you would proxy these calls through your server.
+    // For now, we'll attempt the call and handle CORS errors gracefully.
+
+    const accountId = state.teller.accountId;
+    if (!accountId) {
+      throw new Error('No account ID available');
+    }
+
+    const response = await fetch(`https://api.teller.io/accounts/${accountId}/balances`, {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Basic ' + btoa(state.teller.accessToken + ':'),
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const balanceData = await response.json();
+
+    // Use available balance if present, otherwise use ledger balance
+    const balance = parseFloat(balanceData.available || balanceData.ledger || 0);
+
+    state.teller.lastBalance = balance;
+    state.teller.lastUpdated = new Date().toISOString();
+
+    // Update the current cash if not using manual override
+    if (!state.teller.useManualOverride) {
+      state.currentCash = balance;
+      document.getElementById('currentCash').value = balance;
+    }
+
+    saveState();
+    render();
+    renderBankConnectionUI();
+
+  } catch (error) {
+    console.error('Error fetching balance:', error);
+
+    // CORS errors or network issues
+    if (error.message.includes('CORS') || error.message.includes('NetworkError') || error.name === 'TypeError') {
+      // For CORS issues, show a helpful message but keep the connection
+      console.log('CORS restriction detected. Balance refresh requires a backend proxy.');
+
+      // Mark that we're connected but can't auto-refresh
+      state.teller.lastUpdated = state.teller.lastUpdated || new Date().toISOString();
+      saveState();
+      renderBankConnectionUI();
+
+      // Don't show an error for CORS - just inform user
+      showBankSyncNotice('Bank connected. For automatic balance sync, set up a backend proxy.');
+    } else {
+      // For other errors, show an error state
+      if (statusDot) statusDot.classList.add('error');
+      showBankSyncNotice('Unable to refresh balance. Please try again or update manually.');
+    }
+  } finally {
+    if (statusDot) statusDot.classList.remove('refreshing');
+    if (refreshBtn) {
+      refreshBtn.textContent = 'Refresh';
+      refreshBtn.disabled = false;
+    }
+  }
+}
+
+// Show a temporary notice about bank sync
+function showBankSyncNotice(message) {
+  const sourceInfo = document.getElementById('balanceSourceInfo');
+  if (sourceInfo) {
+    const sourceText = document.getElementById('balanceSourceText');
+    if (sourceText) {
+      sourceText.innerHTML = `<span style="color: var(--accent-amber);">${message}</span>`;
+    }
+    sourceInfo.classList.remove('hidden');
+
+    // Clear after 5 seconds
+    setTimeout(() => {
+      renderBankConnectionUI();
+    }, 5000);
+  }
+}
+
+// Disconnect the bank account
+function disconnectBank() {
+  if (confirm('Are you sure you want to disconnect your bank account?')) {
+    state.teller = {
+      connected: false,
+      accessToken: null,
+      enrollmentId: null,
+      institutionName: null,
+      accountId: null,
+      accountName: null,
+      accountType: null,
+      lastBalance: null,
+      lastUpdated: null,
+      useManualOverride: false
+    };
+    saveState();
+    renderBankConnectionUI();
+    render();
+  }
+}
+
+// Toggle between bank balance and manual override
+function toggleBalanceSource() {
+  const checkbox = document.getElementById('useManualOverride');
+  state.teller.useManualOverride = checkbox.checked;
+
+  if (!state.teller.useManualOverride && state.teller.lastBalance !== null) {
+    // Switch to bank balance
+    state.currentCash = state.teller.lastBalance;
+    document.getElementById('currentCash').value = state.teller.lastBalance;
+  }
+
+  saveState();
+  render();
+  renderBankConnectionUI();
+}
+
+// Handle when user manually changes the balance while connected
+function handleManualBalanceChange() {
+  if (state.teller.connected && !state.teller.useManualOverride) {
+    // User is manually editing while connected - automatically enable override
+    state.teller.useManualOverride = true;
+    const checkbox = document.getElementById('useManualOverride');
+    if (checkbox) checkbox.checked = true;
+    saveState();
+    renderBankConnectionUI();
+  }
+}
+
+// Format time ago for display
+function formatTimeAgo(dateString) {
+  if (!dateString) return '';
+
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins} min ago`;
+  if (diffHours < 24) return `${diffHours} hr ago`;
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+
+  return date.toLocaleDateString();
+}
+
+// Render the bank connection UI based on current state
+function renderBankConnectionUI() {
+  const connectBtn = document.getElementById('connectBankBtn');
+  const bankInfo = document.getElementById('bankBalanceInfo');
+  const bankName = document.getElementById('bankInstitutionName');
+  const accountName = document.getElementById('bankAccountName');
+  const sourceInfo = document.getElementById('balanceSourceInfo');
+  const sourceText = document.getElementById('balanceSourceText');
+  const overrideCheckbox = document.getElementById('useManualOverride');
+  const bankConnectActions = document.getElementById('bankConnectActions');
+
+  if (!state.teller.connected) {
+    // Show connect button, hide connected info
+    if (bankConnectActions) bankConnectActions.classList.remove('hidden');
+    if (connectBtn) connectBtn.classList.remove('hidden');
+    if (bankInfo) bankInfo.classList.add('hidden');
+    if (sourceInfo) sourceInfo.classList.add('hidden');
+  } else {
+    // Show connected info, hide connect button
+    if (bankConnectActions) bankConnectActions.classList.add('hidden');
+    if (connectBtn) connectBtn.classList.add('hidden');
+    if (bankInfo) bankInfo.classList.remove('hidden');
+
+    // Update bank info display
+    if (bankName) bankName.textContent = state.teller.institutionName || 'Connected Bank';
+    if (accountName) {
+      const acctDisplay = state.teller.accountName ?
+        ` - ${state.teller.accountName}` : '';
+      accountName.textContent = acctDisplay;
+    }
+
+    // Show balance source info
+    if (sourceInfo) sourceInfo.classList.remove('hidden');
+    if (sourceText) {
+      if (state.teller.useManualOverride) {
+        sourceText.innerHTML = `<span>Using manual entry</span>`;
+      } else if (state.teller.lastUpdated) {
+        const timeAgo = formatTimeAgo(state.teller.lastUpdated);
+        sourceText.innerHTML = `<span>Bank balance</span><span class="balance-updated-time">updated ${timeAgo}</span>`;
+      } else {
+        sourceText.innerHTML = `<span>Connected to bank</span>`;
+      }
+    }
+
+    // Update override checkbox
+    if (overrideCheckbox) {
+      overrideCheckbox.checked = state.teller.useManualOverride;
+    }
+  }
+
+  // Also update the dashboard indicator
+  renderDashboardBankSync();
+}
+
+// Render bank sync indicator in dashboard
+function renderDashboardBankSync() {
+  // Find or create the dashboard bank sync container
+  let syncContainer = document.getElementById('dashboardBankSync');
+
+  if (!state.teller.connected) {
+    // Remove if not connected
+    if (syncContainer) syncContainer.remove();
+    return;
+  }
+
+  // Create if doesn't exist
+  if (!syncContainer) {
+    syncContainer = document.createElement('div');
+    syncContainer.id = 'dashboardBankSync';
+    syncContainer.className = 'dashboard-bank-sync';
+
+    // Insert after metrics grid
+    const metricsGrid = document.getElementById('metricsGrid');
+    if (metricsGrid && metricsGrid.parentNode) {
+      metricsGrid.parentNode.insertBefore(syncContainer, metricsGrid.nextSibling);
+    }
+  }
+
+  // Build content
+  const timeAgo = state.teller.lastUpdated ? formatTimeAgo(state.teller.lastUpdated) : 'never';
+  const statusText = state.teller.useManualOverride ?
+    'Using manual balance (bank connected)' :
+    `Balance from <strong>${state.teller.institutionName}</strong>`;
+
+  syncContainer.innerHTML = `
+    <div class="dashboard-bank-sync-info">
+      <span class="dashboard-bank-sync-icon">🏦</span>
+      <span class="dashboard-bank-sync-text">${statusText}</span>
+      <span class="dashboard-bank-sync-time">· updated ${timeAgo}</span>
+    </div>
+    <div class="dashboard-bank-sync-actions">
+      <button class="btn btn-link btn-sm" onclick="refreshBankBalance()">Refresh</button>
+    </div>
+  `;
+}
+
 // ==================== CALCULATED ENTRY HELPERS ====================
 
 // Check if an entry is a calculated entry
@@ -549,7 +911,12 @@ function saveState() {
 function loadState() {
   const saved = localStorage.getItem('cashFlowPlannerState');
   if (saved) {
-    state = { ...state, ...JSON.parse(saved) };
+    const parsed = JSON.parse(saved);
+    // Deep merge teller object to preserve defaults
+    if (parsed.teller) {
+      parsed.teller = { ...state.teller, ...parsed.teller };
+    }
+    state = { ...state, ...parsed };
     document.getElementById('currentCash').value = state.currentCash;
     document.getElementById('locLimit').value = state.locLimit;
     document.getElementById('locBalance').value = state.locBalance;
@@ -578,6 +945,9 @@ function loadState() {
     if (state.syncFilters) {
       document.getElementById('syncFiltersCheckbox').checked = true;
     }
+
+    // Restore bank connection UI
+    renderBankConnectionUI();
   }
 }
 
@@ -604,12 +974,17 @@ function importData(event) {
   reader.onload = function(e) {
     try {
       const imported = JSON.parse(e.target.result);
+      // Deep merge teller object to preserve defaults
+      if (imported.teller) {
+        imported.teller = { ...state.teller, ...imported.teller };
+      }
       state = { ...state, ...imported };
       document.getElementById('currentCash').value = state.currentCash;
       document.getElementById('locLimit').value = state.locLimit;
       document.getElementById('locBalance').value = state.locBalance;
       saveState();
       render();
+      renderBankConnectionUI();
       alert('Data imported successfully!');
     } catch (err) {
       alert('Error importing file. Please check the format.');
@@ -4104,4 +4479,10 @@ document.addEventListener('DOMContentLoaded', function() {
   migrateToScenarios();
   checkSetupStatus();
   render();
+
+  // Initialize Teller Connect for bank linking
+  initTellerConnect();
+
+  // Render bank connection UI (in case loadState didn't have saved data)
+  renderBankConnectionUI();
 });

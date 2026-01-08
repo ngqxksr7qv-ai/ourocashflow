@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ouro Cash Flow</title>
   <link rel="stylesheet" href="css/styles.css">
+  <!-- Teller Connect for bank account linking -->
+  <script src="https://cdn.teller.io/connect/connect.js"></script>
 </head>
 <body>
   <div class="container">
@@ -105,9 +107,37 @@
     <div class="card" id="cashSettingsCard">
       <div class="card-title">Cash Position</div>
       <div class="form-grid">
-        <div class="input-group" id="currentCashGroup">
-          <label>Current Cash Balance</label>
-          <input type="number" class="input" id="currentCash" value="15000" onchange="updateSettings()" onfocus="onCashInputFocus()" style="font-family: 'IBM Plex Mono', monospace;">
+        <div class="input-group input-group-wide" id="currentCashGroup">
+          <div class="balance-header">
+            <label>Current Cash Balance</label>
+            <div id="bankConnectionStatus"></div>
+          </div>
+          <div class="balance-input-row">
+            <input type="number" class="input" id="currentCash" value="15000" onchange="updateSettings(); handleManualBalanceChange();" onfocus="onCashInputFocus()" style="font-family: 'IBM Plex Mono', monospace;">
+            <div id="bankConnectActions">
+              <button class="btn btn-secondary btn-sm" id="connectBankBtn" onclick="openTellerConnect()">
+                <span class="bank-icon">🏦</span> Connect Bank
+              </button>
+            </div>
+          </div>
+          <div id="bankBalanceInfo" class="bank-balance-info hidden">
+            <div class="bank-balance-status">
+              <span class="bank-status-dot"></span>
+              <span id="bankInstitutionName"></span>
+              <span class="bank-account-name" id="bankAccountName"></span>
+            </div>
+            <div class="bank-balance-actions">
+              <button class="btn btn-link btn-sm" id="refreshBalanceBtn" onclick="refreshBankBalance()">Refresh</button>
+              <button class="btn btn-link btn-sm btn-danger-link" onclick="disconnectBank()">Disconnect</button>
+            </div>
+          </div>
+          <div id="balanceSourceInfo" class="balance-source-info hidden">
+            <span id="balanceSourceText"></span>
+            <label class="override-toggle" id="overrideToggle">
+              <input type="checkbox" id="useManualOverride" onchange="toggleBalanceSource()">
+              <span>Use manual entry instead</span>
+            </label>
+          </div>
         </div>
         <div class="input-group">
           <label>Line of Credit Limit</label>

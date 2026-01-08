@@ -2772,3 +2772,278 @@ input[type="file"] {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ==================== BANK CONNECTION (TELLER) ==================== */
+
+.input-group-wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 768px) {
+  .input-group-wide {
+    grid-column: span 1;
+  }
+}
+
+.balance-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.balance-input-row {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.balance-input-row .input {
+  flex: 1;
+}
+
+#bankConnectActions {
+  display: flex;
+  align-items: center;
+}
+
+#connectBankBtn {
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#connectBankBtn .bank-icon {
+  font-size: 16px;
+}
+
+.bank-balance-info {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: var(--accent-blue-light);
+  border-radius: var(--radius-sm);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.bank-balance-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.bank-status-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--accent-green);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.bank-status-dot.refreshing {
+  background: var(--accent-amber);
+  animation: pulse 1.5s infinite;
+}
+
+.bank-status-dot.error {
+  background: var(--accent-coral);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+#bankInstitutionName {
+  font-weight: 600;
+}
+
+.bank-account-name {
+  color: var(--text-secondary);
+}
+
+.bank-balance-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--accent-blue);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 8px;
+  text-decoration: none;
+}
+
+.btn-link:hover {
+  text-decoration: underline;
+}
+
+.btn-danger-link {
+  color: var(--accent-coral);
+}
+
+.balance-source-info {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+#balanceSourceText {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.balance-updated-time {
+  color: var(--text-muted);
+}
+
+.override-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.override-toggle input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.override-toggle:hover {
+  color: var(--text-primary);
+}
+
+/* Dashboard bank sync indicator */
+.dashboard-bank-sync {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: var(--accent-blue-light);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.dashboard-bank-sync-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.dashboard-bank-sync-icon {
+  font-size: 18px;
+}
+
+.dashboard-bank-sync-text {
+  color: var(--text-primary);
+}
+
+.dashboard-bank-sync-text strong {
+  font-weight: 600;
+}
+
+.dashboard-bank-sync-time {
+  color: var(--text-secondary);
+}
+
+.dashboard-bank-sync-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Manual override indicator in dashboard */
+.balance-override-notice {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--accent-amber-light);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--accent-amber);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Metric card with bank indicator */
+.metric-card.has-bank-connection .metric-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.metric-bank-indicator {
+  font-size: 12px;
+}
+
+/* Teller Connect loading state */
+.teller-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.teller-loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-light);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .balance-input-row {
+    flex-direction: column;
+  }
+
+  #bankConnectActions {
+    width: 100%;
+  }
+
+  #connectBankBtn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .bank-balance-info {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .balance-source-info {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .dashboard-bank-sync {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
