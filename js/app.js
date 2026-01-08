@@ -437,9 +437,12 @@ function migrateToScenarios() {
 
 // ==================== TELLER BANK CONNECTION ====================
 
-// Teller application ID - users should replace with their own
-// Get one at https://teller.io/
-const TELLER_APPLICATION_ID = 'app_p9bf7fqk0fn4l4008'; // Demo/sandbox app ID
+// Teller application ID - replace with your own from https://teller.io/
+// 1. Sign up at teller.io
+// 2. Create an application in your dashboard
+// 3. Copy your application ID (starts with 'app_')
+// 4. Paste it below
+const TELLER_APPLICATION_ID = ''; // Enter your Teller app ID here, e.g. 'app_xxxxxxxxxx'
 
 let tellerConnect = null;
 
@@ -447,6 +450,12 @@ let tellerConnect = null;
 function initTellerConnect() {
   if (typeof TellerConnect === 'undefined') {
     console.warn('Teller Connect not loaded');
+    return;
+  }
+
+  // Check if application ID is configured
+  if (!TELLER_APPLICATION_ID || TELLER_APPLICATION_ID === '') {
+    console.log('Teller application ID not configured');
     return;
   }
 
@@ -468,6 +477,12 @@ function initTellerConnect() {
 
 // Open Teller Connect modal
 function openTellerConnect() {
+  // Check if Teller is configured
+  if (!TELLER_APPLICATION_ID || TELLER_APPLICATION_ID === '') {
+    alert('Teller is not configured yet.\n\nTo connect your bank account:\n1. Sign up at teller.io\n2. Create an application\n3. Edit js/app.js line 445\n4. Add your application ID');
+    return;
+  }
+
   if (!tellerConnect) {
     initTellerConnect();
   }
