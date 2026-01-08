@@ -442,7 +442,7 @@ function migrateToScenarios() {
 // 2. Create an application in your dashboard
 // 3. Copy your application ID (starts with 'app_')
 // 4. Paste it below
-const TELLER_APPLICATION_ID = ''; // Enter your Teller app ID here, e.g. 'app_xxxxxxxxxx'
+const TELLER_APPLICATION_ID = 'app_pn6vhgbp36a2k81388000'; // Enter your Teller app ID here, e.g. 'app_xxxxxxxxxx'
 
 let tellerConnect = null;
 
