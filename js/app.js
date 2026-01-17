@@ -10,6 +10,7 @@ let state = {
   metricsCustomStart: null,
   metricsCustomEnd: null,
   syncFilters: false,
+  timelineViewMode: 'grouped', // 'grouped' | 'expanded'
   tableView: 'monthly',
   timelineItemsPerPage: 50,
   timelineCurrentPage: 1,
@@ -618,6 +619,11 @@ function loadState() {
     // Restore sync filters checkbox
     if (state.syncFilters) {
       document.getElementById('syncFiltersCheckbox').checked = true;
+    }
+
+    // Restore timeline view mode
+    if (state.timelineViewMode) {
+      document.getElementById('timelineViewMode').value = state.timelineViewMode;
     }
   }
 }
@@ -1461,18 +1467,17 @@ function renderChart(forecast) {
 
 function renderForecast(forecast) {
   const daysWithEntries = forecast.dailyForecast.filter(day => day.entries.length > 0);
+  const isExpanded = state.timelineViewMode === 'expanded';
 
-  // Pagination
-  const itemsPerPage = state.timelineItemsPerPage;
-  const currentPage = state.timelineCurrentPage;
-  const totalItems = daysWithEntries.length;
-  const totalPages = Math.ceil(totalItems / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedDays = daysWithEntries.slice(startIndex, endIndex);
-
-  // Column headers
-  const headerHtml = `
+  // Column headers - different based on view mode
+  const headerHtml = isExpanded ? `
+    <div class="forecast-header forecast-header-expanded">
+      <div>Date</div>
+      <div>Description</div>
+      <div style="text-align: right;">Amount</div>
+      <div style="text-align: right;">Projected Balance</div>
+    </div>
+  ` : `
     <div class="forecast-header">
       <div>Date</div>
       <div>Transactions</div>
@@ -1481,8 +1486,33 @@ function renderForecast(forecast) {
     </div>
   `;
 
-  const html = paginatedDays.map(day => {
-    const entriesHtml = day.entries.map(entry => {
+  let html = '';
+  let totalItems = 0;
+  let paginatedItems = [];
+
+  if (isExpanded) {
+    // Expanded view: flatten all entries into individual rows
+    const allEntries = [];
+    daysWithEntries.forEach(day => {
+      day.entries.forEach(entry => {
+        allEntries.push({
+          date: day.date,
+          entry: entry,
+          dayBalance: day.balance
+        });
+      });
+    });
+
+    totalItems = allEntries.length;
+    const itemsPerPage = state.timelineItemsPerPage;
+    const currentPage = state.timelineCurrentPage;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    paginatedItems = allEntries.slice(startIndex, endIndex);
+
+    html = paginatedItems.map(item => {
+      const entry = item.entry;
       let colorClass = '';
       let prefix = '';
       let label = entry.description;
@@ -1510,39 +1540,91 @@ function renderForecast(forecast) {
       }
 
       return `
-        <span class="forecast-entry ${entry.type}">
-          <span class="${colorClass}" style="${entry.type.startsWith('loc') ? 'color: #7c3aed;' : ''}">${prefix}${formatCurrency(entry.amount)}</span>
-          <span style="color: var(--text-secondary);">${label}${calcContext}</span>
-        </span>
+        <div class="forecast-row forecast-row-expanded">
+          <div class="entry-date">${formatDate(item.date)}</div>
+          <div class="entry-description">
+            <span class="forecast-entry-type ${entry.type}"></span>
+            ${label}${calcContext}
+          </div>
+          <div class="entry-amount ${colorClass}" style="${entry.type.startsWith('loc') ? 'color: #7c3aed;' : ''}">${prefix}${formatCurrency(entry.amount)}</div>
+          <div class="entry-amount" style="color: ${getStatusColor(item.dayBalance)};">${formatCurrency(item.dayBalance)}</div>
+        </div>
       `;
     }).join('');
 
-    const netChange = day.revenue - day.expenses + day.locDraws - day.locPaydowns;
-    return `
-      <div class="forecast-row">
-        <div class="entry-date">${formatDate(day.date)}</div>
-        <div class="forecast-entries">${entriesHtml}</div>
-        <div class="entry-amount ${netChange >= 0 ? 'positive' : 'negative'}">${netChange >= 0 ? '+' : ''}${formatCurrency(netChange)}</div>
-        <div class="entry-amount" style="color: ${getStatusColor(day.balance)};">${formatCurrency(day.balance)}</div>
-      </div>
-    `;
-  }).join('');
+    updateTimelinePagination(totalItems, state.timelineCurrentPage, totalPages, 'items');
+  } else {
+    // Grouped view: original behavior
+    totalItems = daysWithEntries.length;
+    const itemsPerPage = state.timelineItemsPerPage;
+    const currentPage = state.timelineCurrentPage;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const paginatedDays = daysWithEntries.slice(startIndex, endIndex);
 
-  const forecastContent = paginatedDays.length > 0
+    html = paginatedDays.map(day => {
+      const entriesHtml = day.entries.map(entry => {
+        let colorClass = '';
+        let prefix = '';
+        let label = entry.description;
+        let calcContext = '';
+
+        if (entry.type === 'revenue') {
+          colorClass = 'positive';
+          prefix = '+';
+        } else if (entry.type === 'expense') {
+          colorClass = 'negative';
+          prefix = '-';
+        } else if (entry.type === 'loc_draw') {
+          colorClass = '';
+          prefix = '+';
+          label = `🏦 ${entry.description}`;
+        } else if (entry.type === 'loc_paydown') {
+          colorClass = '';
+          prefix = '-';
+          label = `🏦 ${entry.description}`;
+        }
+
+        // Add calculation context for calculated entries
+        if (entry.calculatedFrom && entry.calculationType === 'percentage') {
+          calcContext = ` <span style="font-size: 11px; color: var(--accent-blue);">(${entry.calculationValue}%)</span>`;
+        }
+
+        return `
+          <span class="forecast-entry ${entry.type}">
+            <span class="${colorClass}" style="${entry.type.startsWith('loc') ? 'color: #7c3aed;' : ''}">${prefix}${formatCurrency(entry.amount)}</span>
+            <span style="color: var(--text-secondary);">${label}${calcContext}</span>
+          </span>
+        `;
+      }).join('');
+
+      const netChange = day.revenue - day.expenses + day.locDraws - day.locPaydowns;
+      return `
+        <div class="forecast-row">
+          <div class="entry-date">${formatDate(day.date)}</div>
+          <div class="forecast-entries">${entriesHtml}</div>
+          <div class="entry-amount ${netChange >= 0 ? 'positive' : 'negative'}">${netChange >= 0 ? '+' : ''}${formatCurrency(netChange)}</div>
+          <div class="entry-amount" style="color: ${getStatusColor(day.balance)};">${formatCurrency(day.balance)}</div>
+        </div>
+      `;
+    }).join('');
+
+    updateTimelinePagination(totalItems, state.timelineCurrentPage, Math.ceil(totalItems / state.timelineItemsPerPage), 'days');
+  }
+
+  const forecastContent = (isExpanded ? paginatedItems.length : totalItems) > 0
     ? headerHtml + html
     : '<p style="color: var(--text-muted); padding: 24px; text-align: center;">No transactions in this period</p>';
   document.getElementById('forecastList').innerHTML = forecastContent;
-
-  // Update pagination info and buttons
-  updateTimelinePagination(totalItems, currentPage, totalPages);
 }
 
-function updateTimelinePagination(totalItems, currentPage, totalPages) {
+function updateTimelinePagination(totalItems, currentPage, totalPages, itemType = 'days') {
   const startItem = totalItems === 0 ? 0 : (currentPage - 1) * state.timelineItemsPerPage + 1;
   const endItem = Math.min(currentPage * state.timelineItemsPerPage, totalItems);
 
   document.getElementById('timelinePaginationInfo').textContent =
-    totalItems > 0 ? `Showing ${startItem}-${endItem} of ${totalItems} days` : 'No items to display';
+    totalItems > 0 ? `Showing ${startItem}-${endItem} of ${totalItems} ${itemType}` : 'No items to display';
 
   document.getElementById('timelinePrevBtn').disabled = currentPage === 1;
   document.getElementById('timelineNextBtn').disabled = currentPage >= totalPages || totalPages === 0;
@@ -2155,6 +2237,13 @@ function toggleSyncFilters() {
     syncDashboardToTimeline();
   }
 
+  saveState();
+  render();
+}
+
+function updateTimelineViewMode() {
+  state.timelineViewMode = document.getElementById('timelineViewMode').value;
+  state.timelineCurrentPage = 1; // Reset to first page when changing view mode
   saveState();
   render();
 }

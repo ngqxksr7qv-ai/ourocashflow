@@ -1054,6 +1054,62 @@ body {
   background: var(--accent-coral-light);
 }
 
+/* Expanded Timeline View */
+.forecast-header-expanded {
+  display: grid;
+  grid-template-columns: 90px 1fr 100px 120px;
+  align-items: center;
+  padding: 10px 16px;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.forecast-row-expanded {
+  display: grid;
+  grid-template-columns: 90px 1fr 100px 120px;
+  align-items: center;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 2px;
+  gap: 12px;
+}
+
+.forecast-row-expanded:hover {
+  background: var(--bg-warm);
+}
+
+.entry-description {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.forecast-entry-type {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.forecast-entry-type.revenue {
+  background: var(--accent-green);
+}
+
+.forecast-entry-type.expense {
+  background: var(--accent-coral);
+}
+
+.forecast-entry-type.loc_draw,
+.forecast-entry-type.loc_paydown {
+  background: #7c3aed;
+}
+
 /* Table View */
 .table-view {
   overflow-x: auto;
@@ -1383,11 +1439,13 @@ input[type="file"] {
     display: none;
   }
 
-  .forecast-header {
+  .forecast-header,
+  .forecast-header-expanded {
     display: none;
   }
 
-  .forecast-row {
+  .forecast-row,
+  .forecast-row-expanded {
     grid-template-columns: 1fr;
     gap: 8px;
   }
@@ -2085,6 +2143,37 @@ input[type="file"] {
 /* Sync filter label styling */
 .sync-filter-label {
   user-select: none;
+}
+
+/* Timeline controls separator */
+.timeline-controls-separator {
+  display: inline-block;
+  width: 1px;
+  height: 20px;
+  background: var(--border-light);
+  margin: 0 4px;
+}
+
+/* Timeline view mode dropdown */
+.timeline-view-mode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.timeline-view-mode select {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.timeline-view-mode select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
 }
 
 /* ==================== SCENARIO PLANNING ==================== */
