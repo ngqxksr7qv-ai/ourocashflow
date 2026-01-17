@@ -16,6 +16,8 @@ let state = {
   entriesItemsPerPage: 50,
   entriesCurrentPage: 1,
   entryDisplayMode: 'grouped', // 'grouped' | 'date_sorted'
+  timelineViewMode: 'grouped', // 'grouped' | 'expanded'
+  showTimelineNotes: false,
   // Scenario planning support
   activeScenarioId: 'base',
   scenarios: [
@@ -1462,6 +1464,34 @@ function renderChart(forecast) {
 function renderForecast(forecast) {
   const daysWithEntries = forecast.dailyForecast.filter(day => day.entries.length > 0);
 
+  // Update view mode dropdown
+  const viewModeSelect = document.getElementById('timelineViewMode');
+  if (viewModeSelect) {
+    viewModeSelect.value = state.timelineViewMode || 'grouped';
+  }
+
+  // Show/hide notes toggle button based on view mode
+  const toggleNotesBtn = document.getElementById('toggleNotesBtn');
+  if (toggleNotesBtn) {
+    if (state.timelineViewMode === 'expanded') {
+      toggleNotesBtn.classList.remove('hidden');
+      const btnText = document.getElementById('toggleNotesBtnText');
+      if (btnText) {
+        btnText.textContent = state.showTimelineNotes ? 'Hide Notes' : 'Show Notes';
+      }
+    } else {
+      toggleNotesBtn.classList.add('hidden');
+    }
+  }
+
+  if (state.timelineViewMode === 'expanded') {
+    renderForecastExpanded(forecast, daysWithEntries);
+  } else {
+    renderForecastGrouped(forecast, daysWithEntries);
+  }
+}
+
+function renderForecastGrouped(forecast, daysWithEntries) {
   // Pagination
   const itemsPerPage = state.timelineItemsPerPage;
   const currentPage = state.timelineCurrentPage;
@@ -1487,6 +1517,7 @@ function renderForecast(forecast) {
       let prefix = '';
       let label = entry.description;
       let calcContext = '';
+      let notesIndicator = '';
 
       if (entry.type === 'revenue') {
         colorClass = 'positive';
@@ -1509,10 +1540,15 @@ function renderForecast(forecast) {
         calcContext = ` <span style="font-size: 11px; color: var(--accent-blue);">(${entry.calculationValue}%)</span>`;
       }
 
+      // Add notes indicator if entry has notes
+      if (entry.notes) {
+        notesIndicator = `<span class="timeline-notes-indicator" title="${escapeHtml(entry.notes)}">📝</span>`;
+      }
+
       return `
         <span class="forecast-entry ${entry.type}">
           <span class="${colorClass}" style="${entry.type.startsWith('loc') ? 'color: #7c3aed;' : ''}">${prefix}${formatCurrency(entry.amount)}</span>
-          <span style="color: var(--text-secondary);">${label}${calcContext}</span>
+          <span style="color: var(--text-secondary);">${label}${calcContext}${notesIndicator}</span>
         </span>
       `;
     }).join('');
@@ -1534,15 +1570,133 @@ function renderForecast(forecast) {
   document.getElementById('forecastList').innerHTML = forecastContent;
 
   // Update pagination info and buttons
-  updateTimelinePagination(totalItems, currentPage, totalPages);
+  updateTimelinePagination(totalItems, currentPage, totalPages, 'days');
 }
 
-function updateTimelinePagination(totalItems, currentPage, totalPages) {
+function renderForecastExpanded(forecast, daysWithEntries) {
+  // Collect all entries with their day context
+  const allEntries = [];
+  daysWithEntries.forEach(day => {
+    day.entries.forEach(entry => {
+      allEntries.push({
+        entry,
+        date: day.date,
+        balance: day.balance
+      });
+    });
+  });
+
+  // Pagination based on individual entries
+  const itemsPerPage = state.timelineItemsPerPage;
+  const currentPage = state.timelineCurrentPage;
+  const totalItems = allEntries.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedEntries = allEntries.slice(startIndex, endIndex);
+
+  // Column headers for expanded view
+  const headerHtml = `
+    <div class="forecast-header forecast-header-expanded">
+      <div>Date</div>
+      <div>Description</div>
+      <div>Type</div>
+      <div style="text-align: right;">Amount</div>
+      <div style="text-align: right;">Balance</div>
+    </div>
+  `;
+
+  const html = paginatedEntries.map(({ entry, date, balance }) => {
+    let colorClass = '';
+    let prefix = '';
+    let typeLabel = '';
+
+    if (entry.type === 'revenue') {
+      colorClass = 'positive';
+      prefix = '+';
+      typeLabel = 'Income';
+    } else if (entry.type === 'expense') {
+      colorClass = 'negative';
+      prefix = '-';
+      typeLabel = 'Expense';
+    } else if (entry.type === 'loc_draw') {
+      colorClass = '';
+      prefix = '+';
+      typeLabel = 'LOC Draw';
+    } else if (entry.type === 'loc_paydown') {
+      colorClass = '';
+      prefix = '-';
+      typeLabel = 'LOC Paydown';
+    }
+
+    // Add calculation context for calculated entries
+    let calcContext = '';
+    if (entry.calculatedFrom && entry.calculationType === 'percentage') {
+      calcContext = ` <span style="font-size: 11px; color: var(--accent-blue);">(${entry.calculationValue}%)</span>`;
+    }
+
+    // Notes display
+    let notesHtml = '';
+    if (state.showTimelineNotes && entry.notes) {
+      notesHtml = `<div class="timeline-entry-notes">${escapeHtml(entry.notes)}</div>`;
+    }
+
+    // Notes indicator (shown when notes are hidden but entry has notes)
+    let notesIndicator = '';
+    if (!state.showTimelineNotes && entry.notes) {
+      notesIndicator = `<span class="timeline-notes-indicator" title="${escapeHtml(entry.notes)}">📝</span>`;
+    }
+
+    const description = entry.type.startsWith('loc') ? `🏦 ${entry.description}` : entry.description;
+
+    return `
+      <div class="forecast-row-expanded">
+        <div class="entry-date">${formatDate(date)}</div>
+        <div class="entry-desc-expanded">
+          <span>${description}${calcContext}${notesIndicator}</span>
+          ${notesHtml}
+        </div>
+        <div class="entry-type ${entry.type}">${typeLabel}</div>
+        <div class="entry-amount ${colorClass}" style="${entry.type.startsWith('loc') ? 'color: #7c3aed;' : ''}">${prefix}${formatCurrency(entry.amount)}</div>
+        <div class="entry-amount" style="color: ${getStatusColor(balance)};">${formatCurrency(balance)}</div>
+      </div>
+    `;
+  }).join('');
+
+  const forecastContent = paginatedEntries.length > 0
+    ? headerHtml + html
+    : '<p style="color: var(--text-muted); padding: 24px; text-align: center;">No transactions in this period</p>';
+  document.getElementById('forecastList').innerHTML = forecastContent;
+
+  // Update pagination info and buttons
+  updateTimelinePagination(totalItems, currentPage, totalPages, 'items');
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function changeTimelineViewMode() {
+  state.timelineViewMode = document.getElementById('timelineViewMode').value;
+  state.timelineCurrentPage = 1; // Reset to first page when switching views
+  saveState();
+  render();
+}
+
+function toggleTimelineNotes() {
+  state.showTimelineNotes = !state.showTimelineNotes;
+  saveState();
+  render();
+}
+
+function updateTimelinePagination(totalItems, currentPage, totalPages, unit = 'days') {
   const startItem = totalItems === 0 ? 0 : (currentPage - 1) * state.timelineItemsPerPage + 1;
   const endItem = Math.min(currentPage * state.timelineItemsPerPage, totalItems);
 
   document.getElementById('timelinePaginationInfo').textContent =
-    totalItems > 0 ? `Showing ${startItem}-${endItem} of ${totalItems} days` : 'No items to display';
+    totalItems > 0 ? `Showing ${startItem}-${endItem} of ${totalItems} ${unit}` : 'No items to display';
 
   document.getElementById('timelinePrevBtn').disabled = currentPage === 1;
   document.getElementById('timelineNextBtn').disabled = currentPage >= totalPages || totalPages === 0;
@@ -2241,6 +2395,7 @@ function resetForm() {
   document.getElementById('endConditionType').value = 'never';
   document.getElementById('endDate').value = '';
   document.getElementById('endOccurrences').value = '';
+  document.getElementById('newNotes').value = '';
   document.getElementById('formTitle').textContent = 'Add New Entry';
   document.getElementById('formSubmitBtn').textContent = 'Add to Forecast';
   document.getElementById('cancelEditBtn').classList.add('hidden');
@@ -2262,6 +2417,7 @@ function editEntry(id) {
   document.getElementById('newDesc').value = entry.description;
   document.getElementById('newType').value = entry.type;
   document.getElementById('newRecurring').value = entry.frequency;
+  document.getElementById('newNotes').value = entry.notes || '';
 
   // Set calculation form data (handles amount and calculation settings)
   setCalculationFormData(entry);
@@ -2299,6 +2455,7 @@ function submitEntry() {
   const desc = document.getElementById('newDesc').value;
   const type = document.getElementById('newType').value;
   const frequency = document.getElementById('newRecurring').value;
+  const notes = document.getElementById('newNotes').value.trim();
 
   // Get calculation/amount data
   const calcData = getCalculationFormData();
@@ -2334,6 +2491,7 @@ function submitEntry() {
     description: desc,
     type,
     frequency,
+    notes: notes || null,
     ...calcData
   };
 
