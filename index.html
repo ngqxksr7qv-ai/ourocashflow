@@ -175,6 +175,14 @@
             <input type="checkbox" id="syncFiltersCheckbox" onchange="toggleSyncFilters()" style="cursor: pointer;">
             Sync with Dashboard
           </label>
+          <span class="timeline-controls-separator"></span>
+          <div class="timeline-view-mode">
+            <label style="font-size: 13px; color: var(--text-secondary);">View:</label>
+            <select id="timelineViewMode" onchange="updateTimelineViewMode()">
+              <option value="grouped">Group by Day</option>
+              <option value="expanded">Expanded List</option>
+            </select>
+          </div>
         </div>
         <div style="display: flex; gap: 16px; font-size: 13px; font-weight: normal; align-items: center;">
           <div class="timeline-view-toggle">
