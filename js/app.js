@@ -775,6 +775,43 @@ function calculateEntryAmount(calcEntry, sourceOccurrences, periodStart, periodE
   return 0;
 }
 
+// Get the display amount for a calculated entry in the Projection Items list
+// This computes a representative amount based on source entries' base amounts
+function getCalculatedDisplayAmount(calcEntry) {
+  if (calcEntry.manualOverride && calcEntry.amount !== null) {
+    return calcEntry.amount;
+  }
+
+  if (!calcEntry.calculationType) return 0;
+
+  // Get source entries
+  const entries = getActiveEntries();
+  let sourceEntries = [];
+
+  if (calcEntry.sourceMode === 'all_of_type') {
+    sourceEntries = entries.filter(e => e.type === calcEntry.sourceType && !hasCalculationConfig(e));
+  } else if (calcEntry.sourceEntryIds && calcEntry.sourceEntryIds.length > 0) {
+    sourceEntries = entries.filter(e => calcEntry.sourceEntryIds.includes(e.id));
+  }
+
+  if (sourceEntries.length === 0) return 0;
+
+  if (calcEntry.calculationType === 'percentage') {
+    // Sum of source entries' base amounts * percentage
+    const total = sourceEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+    return Math.round(total * (calcEntry.calculationValue / 100) * 100) / 100;
+  } else if (calcEntry.calculationType === 'fixed') {
+    // Fixed amount per source entry
+    return Math.round(sourceEntries.length * calcEntry.calculationValue * 100) / 100;
+  } else if (calcEntry.calculationType === 'balance_percentage') {
+    // For LOC interest, show estimated monthly interest on current balance
+    const monthlyRate = (calcEntry.calculationValue || 0) / 100 / 12;
+    return Math.round(state.locBalance * monthlyRate * 100) / 100;
+  }
+
+  return 0;
+}
+
 // Get source occurrences for a date based on the source period setting
 function getSourceOccurrencesForDate(calcEntry, baseExpanded, targetDate, startDate, endDate) {
   const entries = getActiveEntries();
@@ -1790,10 +1827,11 @@ function renderEntries() {
 
     const amountStyle = entry.type.startsWith('loc') ? 'color: #7c3aed;' : '';
 
-    // For calculated entries, show "(calculated)" if no manual override
+    // For calculated entries, compute and display the calculated amount
     let amountDisplay = '';
     if (hasCalculationConfig(entry) && !entry.manualOverride) {
-      amountDisplay = '<span style="font-style: italic; color: var(--text-muted);">(calculated)</span>';
+      const calculatedAmount = getCalculatedDisplayAmount(entry);
+      amountDisplay = `${amountPrefix}${formatCurrency(calculatedAmount)}`;
     } else {
       amountDisplay = `${amountPrefix}${formatCurrency(entry.amount)}`;
     }
