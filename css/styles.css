@@ -344,6 +344,75 @@ body {
   min-width: 200px;
 }
 
+/* Unsaved Changes Indicator */
+.unsaved-changes-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-amber-light);
+  border: 1px solid var(--accent-amber);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #b8860b;
+  animation: pulse-border 2s infinite;
+}
+
+.unsaved-changes-indicator.hidden {
+  display: none;
+}
+
+.unsaved-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--accent-amber);
+  border-radius: 50%;
+  animation: pulse-dot 1.5s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes pulse-border {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(221, 161, 94, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(221, 161, 94, 0.2);
+  }
+}
+
+.export-reminder.has-unsaved-changes {
+  background: linear-gradient(135deg, var(--accent-amber-light) 0%, #fef3e8 100%);
+  border-color: var(--accent-amber);
+}
+
+.export-reminder.has-unsaved-changes .export-reminder-text {
+  color: #b8860b;
+}
+
+.export-reminder.has-unsaved-changes .btn-primary {
+  animation: pulse-button 2s infinite;
+}
+
+@keyframes pulse-button {
+  0%, 100% {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  50% {
+    box-shadow: 0 2px 8px rgba(108, 158, 180, 0.4);
+  }
+}
+
 /* Buttons */
 .btn {
   padding: 10px 20px;
