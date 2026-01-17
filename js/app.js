@@ -1982,6 +1982,7 @@ function updateSettings() {
   if (!setupComplete) dismissSetup();
 
   saveState();
+  markUnsavedChanges();
   render();
 }
 
