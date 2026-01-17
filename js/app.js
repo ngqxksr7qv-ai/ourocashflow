@@ -40,6 +40,7 @@ let state = {
 let editingEntryId = null;
 let selectedEntries = new Set();
 let setupComplete = false;
+let hasUnsavedChanges = false;
 
 const frequencyLabels = {
   'once': 'One-time',
@@ -546,6 +547,46 @@ function saveState() {
   localStorage.setItem('cashFlowPlannerState', JSON.stringify(state));
 }
 
+// ==================== UNSAVED CHANGES TRACKING ====================
+
+function markUnsavedChanges() {
+  hasUnsavedChanges = true;
+  updateUnsavedIndicator();
+}
+
+function clearUnsavedChanges() {
+  hasUnsavedChanges = false;
+  updateUnsavedIndicator();
+}
+
+function updateUnsavedIndicator() {
+  const indicator = document.getElementById('unsavedChangesIndicator');
+  const exportReminder = document.querySelector('.export-reminder');
+
+  if (indicator) {
+    if (hasUnsavedChanges) {
+      indicator.classList.remove('hidden');
+      if (exportReminder) {
+        exportReminder.classList.add('has-unsaved-changes');
+      }
+    } else {
+      indicator.classList.add('hidden');
+      if (exportReminder) {
+        exportReminder.classList.remove('has-unsaved-changes');
+      }
+    }
+  }
+}
+
+// Warn user before leaving with unsaved changes
+window.addEventListener('beforeunload', function(e) {
+  if (hasUnsavedChanges) {
+    e.preventDefault();
+    e.returnValue = '';
+    return '';
+  }
+});
+
 function loadState() {
   const saved = localStorage.getItem('cashFlowPlannerState');
   if (saved) {
@@ -594,6 +635,7 @@ function exportData() {
   a.download = 'cashflow-' + timestamp + '.json';
   a.click();
   URL.revokeObjectURL(url);
+  clearUnsavedChanges();
 }
 
 function importData(event) {
@@ -2278,6 +2320,7 @@ function submitEntry() {
   }
 
   saveState();
+  markUnsavedChanges();
   render();
   resetForm();
   document.getElementById('addForm').classList.add('hidden');
@@ -2704,6 +2747,7 @@ function deleteEntry(id) {
   scenario.entries = scenario.entries.filter(e => e.id !== id);
   selectedEntries.delete(id);
   saveState();
+  markUnsavedChanges();
   render();
 }
 
@@ -2721,6 +2765,7 @@ function duplicateEntry(id) {
 
   scenario.entries.push(newEntry);
   saveState();
+  markUnsavedChanges();
   render();
 }
 
@@ -3392,6 +3437,7 @@ function executeSpreadsheetExport() {
   }
 
   hideSpreadsheetExportModal();
+  clearUnsavedChanges();
 }
 
 function formatExportType(type) {
@@ -4092,6 +4138,7 @@ function finalizeImport(scenarioId, mode, entries) {
   }
 
   saveState();
+  markUnsavedChanges();
   render();
   hideSpreadsheetImportModal();
 
