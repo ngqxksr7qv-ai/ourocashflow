@@ -2176,6 +2176,110 @@ input[type="file"] {
   border-color: var(--accent-blue);
 }
 
+/* Timeline View Toggle */
+.timeline-view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.timeline-view-toggle select {
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.timeline-view-toggle select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+/* Timeline Notes Indicator */
+.timeline-notes-indicator {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  font-size: 12px;
+  cursor: help;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+  transition: filter 0.15s, transform 0.15s;
+}
+
+.timeline-notes-indicator:hover {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+  transform: scale(1.1);
+}
+
+/* Timeline Entry Notes (expanded view) */
+.timeline-entry-notes {
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: var(--bg-warm);
+  border-left: 3px solid var(--accent-blue);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* Forecast Header Expanded View */
+.forecast-header-expanded {
+  grid-template-columns: 90px 1fr 90px 100px 120px;
+}
+
+/* Forecast Row Expanded View */
+.forecast-row-expanded {
+  display: grid;
+  grid-template-columns: 90px 1fr 90px 100px 120px;
+  align-items: start;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+  gap: 12px;
+}
+
+.forecast-row-expanded:hover {
+  background: var(--bg-warm);
+}
+
+/* Entry Description in Expanded View */
+.entry-desc-expanded {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 500;
+}
+
+.entry-desc-expanded > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* Responsive adjustments for expanded view */
+@media (max-width: 900px) {
+  .forecast-header-expanded {
+    display: none;
+  }
+
+  .forecast-row-expanded {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .timeline-entry-notes {
+    margin-left: 0;
+  }
+}
+
 /* ==================== SCENARIO PLANNING ==================== */
 
 /* Scenario Selector */
