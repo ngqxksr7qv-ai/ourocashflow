@@ -184,7 +184,10 @@
             </select>
           </div>
         </div>
-        <div style="display: flex; gap: 16px; font-size: 13px; font-weight: normal;">
+        <div style="display: flex; gap: 16px; font-size: 13px; font-weight: normal; align-items: center;">
+          <button id="toggleNotesBtn" class="btn btn-sm btn-secondary hidden" onclick="toggleTimelineNotes()">
+            <span id="toggleNotesBtnText">Show Notes</span>
+          </button>
           <span><span style="display: inline-block; width: 12px; height: 12px; background: var(--accent-green); border-radius: 3px; margin-right: 6px;"></span>Income</span>
           <span><span style="display: inline-block; width: 12px; height: 12px; background: var(--accent-coral); border-radius: 3px; margin-right: 6px;"></span>Expense</span>
         </div>
@@ -318,6 +321,12 @@
             <label># of Times</label>
             <input type="number" class="input" id="endOccurrences" placeholder="e.g., 12" min="1">
           </div>
+        </div>
+
+        <!-- Notes field -->
+        <div class="input-group" style="margin-top: 16px;">
+          <label>Notes (optional)</label>
+          <textarea class="input" id="newNotes" placeholder="Add any additional notes or details..." rows="2" style="resize: vertical;"></textarea>
         </div>
 
         <!-- Calculation Settings (shown when "Calculated" is selected) -->
