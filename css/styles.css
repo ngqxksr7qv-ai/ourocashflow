@@ -339,7 +339,7 @@ body {
 .export-reminder-text {
   flex: 1;
   color: #4a7c91;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   min-width: 200px;
 }
