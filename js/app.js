@@ -1672,13 +1672,6 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-function changeTimelineViewMode() {
-  state.timelineViewMode = document.getElementById('timelineViewMode').value;
-  state.timelineCurrentPage = 1; // Reset to first page when switching views
-  saveState();
-  render();
-}
-
 function toggleTimelineNotes() {
   state.showTimelineNotes = !state.showTimelineNotes;
   saveState();

@@ -1057,7 +1057,7 @@ body {
 /* Expanded Timeline View */
 .forecast-header-expanded {
   display: grid;
-  grid-template-columns: 90px 1fr 100px 120px;
+  grid-template-columns: 90px 1fr 90px 100px 120px;
   align-items: center;
   padding: 10px 16px;
   gap: 12px;
@@ -1070,9 +1070,9 @@ body {
 
 .forecast-row-expanded {
   display: grid;
-  grid-template-columns: 90px 1fr 100px 120px;
-  align-items: center;
-  padding: 10px 16px;
+  grid-template-columns: 90px 1fr 90px 100px 120px;
+  align-items: start;
+  padding: 12px 16px;
   border-radius: var(--radius-sm);
   margin-bottom: 2px;
   gap: 12px;
@@ -1087,6 +1087,20 @@ body {
   align-items: center;
   gap: 8px;
   font-size: 13px;
+}
+
+.entry-desc-expanded {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 500;
+}
+
+.entry-desc-expanded > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 .forecast-entry-type {
@@ -2176,30 +2190,6 @@ input[type="file"] {
   border-color: var(--accent-blue);
 }
 
-/* Timeline View Toggle */
-.timeline-view-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.timeline-view-toggle select {
-  padding: 4px 8px;
-  font-size: 12px;
-  border: 1px solid var(--border-light);
-  border-radius: 6px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  cursor: pointer;
-}
-
-.timeline-view-toggle select:focus {
-  outline: none;
-  border-color: var(--accent-blue);
-}
-
 /* Timeline Notes Indicator */
 .timeline-notes-indicator {
   display: inline-flex;
@@ -2227,41 +2217,6 @@ input[type="file"] {
   color: var(--text-secondary);
   line-height: 1.5;
   white-space: pre-wrap;
-}
-
-/* Forecast Header Expanded View */
-.forecast-header-expanded {
-  grid-template-columns: 90px 1fr 90px 100px 120px;
-}
-
-/* Forecast Row Expanded View */
-.forecast-row-expanded {
-  display: grid;
-  grid-template-columns: 90px 1fr 90px 100px 120px;
-  align-items: start;
-  padding: 14px 16px;
-  border-radius: var(--radius-sm);
-  margin-bottom: 4px;
-  gap: 12px;
-}
-
-.forecast-row-expanded:hover {
-  background: var(--bg-warm);
-}
-
-/* Entry Description in Expanded View */
-.entry-desc-expanded {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-weight: 500;
-}
-
-.entry-desc-expanded > span {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
 }
 
 /* Responsive adjustments for expanded view */
