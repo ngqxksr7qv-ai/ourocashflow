@@ -636,10 +636,20 @@ function exportData() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  // Include date and time in filename (format: cashflow-YYYY-MM-DD-HHmmss.json)
+  // Include date and time in filename (format: cashflow-YYYY-MM-DD-HHmmss_UTC-X.json)
+  // Use local time with UTC offset for clarity when comparing backups across timezones
   const now = new Date();
-  const timestamp = now.toISOString().split('T')[0] + '-' +
-    now.toTimeString().split(' ')[0].replace(/:/g, '');
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  // Get UTC offset (getTimezoneOffset returns minutes with inverted sign)
+  const offsetMinutes = now.getTimezoneOffset();
+  const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60);
+  const offsetSign = offsetMinutes > 0 ? '-' : '+';
+  const timestamp = `${year}-${month}-${day}-${hours}${minutes}${seconds}_UTC${offsetSign}${offsetHours}`;
   a.download = 'cashflow-' + timestamp + '.json';
   a.click();
   URL.revokeObjectURL(url);
