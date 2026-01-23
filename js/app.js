@@ -16,6 +16,7 @@ let state = {
   timelineCurrentPage: 1,
   entriesItemsPerPage: 50,
   entriesCurrentPage: 1,
+  entriesSearchTerm: '',
   entryDisplayMode: 'grouped', // 'grouped' | 'date_sorted'
   timelineViewMode: 'grouped', // 'grouped' | 'expanded'
   showTimelineNotes: false,
@@ -1890,7 +1891,29 @@ function renderEntries() {
     displayModeSelect.value = state.entryDisplayMode || 'grouped';
   }
 
-  const sortedEntryData = getSortedEntriesForDisplay();
+  // Set search input value
+  const searchInput = document.getElementById('entriesSearchInput');
+  if (searchInput && searchInput.value !== state.entriesSearchTerm) {
+    searchInput.value = state.entriesSearchTerm || '';
+  }
+
+  let sortedEntryData = getSortedEntriesForDisplay();
+
+  // Filter by search term
+  const searchTerm = (state.entriesSearchTerm || '').toLowerCase().trim();
+  if (searchTerm) {
+    const typeLabelsForSearch = {
+      'revenue': 'income',
+      'expense': 'expense',
+      'loc_draw': 'loc draw',
+      'loc_paydown': 'loc paydown'
+    };
+    sortedEntryData = sortedEntryData.filter(({ entry }) => {
+      const descMatch = entry.description.toLowerCase().includes(searchTerm);
+      const typeMatch = typeLabelsForSearch[entry.type]?.toLowerCase().includes(searchTerm);
+      return descMatch || typeMatch;
+    });
+  }
 
   const existingIds = new Set(getActiveEntries().map(e => e.id));
   selectedEntries = new Set([...selectedEntries].filter(id => existingIds.has(id)));
@@ -2012,7 +2035,15 @@ function renderEntries() {
     `;
   }).join('');
 
-  document.getElementById('entriesList').innerHTML = batchActionsHtml + headerHtml + (entriesHtml || '<p style="color: var(--text-muted); padding: 24px; text-align: center;">No items yet. Add your first income or expense above!</p>');
+  let emptyMessage = '';
+  if (!entriesHtml) {
+    if (searchTerm) {
+      emptyMessage = `<p style="color: var(--text-muted); padding: 24px; text-align: center;">No items match "${state.entriesSearchTerm}". <a href="javascript:clearEntriesSearch()" style="color: var(--primary-color);">Clear search</a></p>`;
+    } else {
+      emptyMessage = '<p style="color: var(--text-muted); padding: 24px; text-align: center;">No items yet. Add your first income or expense above!</p>';
+    }
+  }
+  document.getElementById('entriesList').innerHTML = batchActionsHtml + headerHtml + (entriesHtml || emptyMessage);
 
   // Update pagination info and buttons
   updateEntriesPagination(totalItems, currentPage, totalPages);
@@ -2034,6 +2065,25 @@ function changeEntriesPage(delta) {
   state.entriesCurrentPage = Math.max(1, state.entriesCurrentPage + delta);
   saveState();
   render();
+}
+
+function filterEntries() {
+  const searchInput = document.getElementById('entriesSearchInput');
+  state.entriesSearchTerm = searchInput ? searchInput.value : '';
+  state.entriesCurrentPage = 1; // Reset to first page when searching
+  saveState();
+  renderEntries();
+}
+
+function clearEntriesSearch() {
+  state.entriesSearchTerm = '';
+  state.entriesCurrentPage = 1;
+  const searchInput = document.getElementById('entriesSearchInput');
+  if (searchInput) {
+    searchInput.value = '';
+  }
+  saveState();
+  renderEntries();
 }
 
 function updateEntriesItemsPerPage() {
