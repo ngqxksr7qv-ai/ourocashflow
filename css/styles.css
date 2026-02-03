@@ -1561,10 +1561,25 @@ input[type="file"] {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: space-between;
 }
 
 .calculation-settings-title::before {
   content: "📊";
+}
+
+.calc-help-link {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  margin-left: auto;
+}
+
+.calc-help-link:hover {
+  color: var(--accent-blue);
+  text-decoration: underline;
 }
 
 .calc-input-row {
