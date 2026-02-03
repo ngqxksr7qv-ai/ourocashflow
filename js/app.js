@@ -2883,16 +2883,23 @@ function toggleSourcePeriod() {
 }
 
 function toggleTimingMode() {
-  const timingMode = document.getElementById('timingMode').value;
+  const timingModeEl = document.getElementById('timingMode');
   const sourcePeriod = document.getElementById('sourcePeriod');
   const sourcePeriodLabel = document.getElementById('sourcePeriodLabel');
   const dateOffsetGroup = document.getElementById('dateOffsetGroup');
   const timingModeHelp = document.getElementById('timingModeHelp');
+
+  // Guard against missing elements
+  if (!timingModeEl || !sourcePeriod) {
+    return;
+  }
+
+  const timingMode = timingModeEl.value;
   const currentValue = sourcePeriod.value;
 
   if (timingMode === 'schedule_driven') {
     // Schedule-driven: use previous periods, show relevant options
-    sourcePeriodLabel.textContent = 'Aggregate from';
+    if (sourcePeriodLabel) sourcePeriodLabel.textContent = 'Aggregate from';
     sourcePeriod.innerHTML = `
       <option value="previous_month">Previous month</option>
       <option value="previous_week">Previous week</option>
@@ -2901,17 +2908,19 @@ function toggleTimingMode() {
       <option value="rolling_days">Rolling days</option>
     `;
     // Default to previous_month for schedule-driven
-    if (['same_day', 'same_week', 'same_month'].includes(currentValue)) {
-      sourcePeriod.value = 'previous_month';
-    } else if (currentValue === 'rolling_days') {
+    if (currentValue === 'rolling_days') {
       sourcePeriod.value = 'rolling_days';
+    } else if (currentValue === 'previous_month' || currentValue === 'previous_week') {
+      sourcePeriod.value = currentValue;
+    } else {
+      sourcePeriod.value = 'previous_month';
     }
     // Hide date offset for schedule-driven (frequency/date controls timing)
-    dateOffsetGroup.classList.add('hidden');
-    timingModeHelp.textContent = 'The calculated entry will appear on your chosen frequency schedule (set above). It will aggregate source amounts from the selected period.';
+    if (dateOffsetGroup) dateOffsetGroup.classList.add('hidden');
+    if (timingModeHelp) timingModeHelp.textContent = 'The calculated entry will appear on your chosen frequency schedule (set above). It will aggregate source amounts from the selected period.';
   } else {
     // Source-driven: use same periods, show relevant options
-    sourcePeriodLabel.textContent = 'Time period';
+    if (sourcePeriodLabel) sourcePeriodLabel.textContent = 'Time period';
     sourcePeriod.innerHTML = `
       <option value="same_day">Same day</option>
       <option value="same_week">Same week</option>
@@ -2929,8 +2938,8 @@ function toggleTimingMode() {
       sourcePeriod.value = 'same_day';
     }
     // Show date offset for source-driven
-    dateOffsetGroup.classList.remove('hidden');
-    timingModeHelp.textContent = 'Source-driven: calculates each time source items occur. Schedule-driven: calculates on your chosen frequency, aggregating from previous period.';
+    if (dateOffsetGroup) dateOffsetGroup.classList.remove('hidden');
+    if (timingModeHelp) timingModeHelp.textContent = 'Source-driven: calculates each time source items occur. Schedule-driven: calculates on your chosen frequency, aggregating from previous period.';
   }
 
   toggleSourcePeriod();
@@ -3095,12 +3104,34 @@ function setCalculationFormData(entry) {
 
     // Set timing mode first, which updates the sourcePeriod options
     const timingMode = entry.timingMode || 'source_driven';
-    document.getElementById('timingMode').value = timingMode;
-    toggleTimingMode();
+    const timingModeEl = document.getElementById('timingMode');
+    if (timingModeEl) {
+      timingModeEl.value = timingMode;
+      toggleTimingMode();
+    }
 
     // Now set the sourcePeriod value (after toggleTimingMode has set up the options)
-    document.getElementById('sourcePeriod').value = entry.sourcePeriod || (timingMode === 'schedule_driven' ? 'previous_month' : 'same_day');
-    toggleSourcePeriod();
+    // Ensure the value is valid for the current timing mode
+    const sourcePeriodEl = document.getElementById('sourcePeriod');
+    if (sourcePeriodEl) {
+      let sourcePeriodValue = entry.sourcePeriod;
+      const scheduleOptions = ['previous_month', 'previous_week', 'same_month', 'same_week', 'rolling_days'];
+      const sourceOptions = ['same_day', 'same_week', 'same_month', 'rolling_days'];
+
+      if (timingMode === 'schedule_driven') {
+        // If saved value isn't valid for schedule mode, use default
+        if (!scheduleOptions.includes(sourcePeriodValue)) {
+          sourcePeriodValue = 'previous_month';
+        }
+      } else {
+        // If saved value isn't valid for source mode, use default
+        if (!sourceOptions.includes(sourcePeriodValue)) {
+          sourcePeriodValue = 'same_day';
+        }
+      }
+      sourcePeriodEl.value = sourcePeriodValue;
+      toggleSourcePeriod();
+    }
 
     if (entry.sourcePeriod === 'rolling_days') {
       document.getElementById('sourcePeriodDays').value = entry.sourcePeriodDays || 30;
