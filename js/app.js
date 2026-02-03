@@ -3739,6 +3739,16 @@ function hideSpreadsheetExportModal() {
   document.getElementById('spreadsheetExportModal').classList.add('hidden');
 }
 
+// Show calculated expense help modal
+function showCalcHelpModal() {
+  document.getElementById('calcHelpModal').classList.remove('hidden');
+}
+
+// Hide calculated expense help modal
+function hideCalcHelpModal() {
+  document.getElementById('calcHelpModal').classList.add('hidden');
+}
+
 // Update export preview with stats
 function updateExportPreview() {
   const scenarioId = document.getElementById('exportScenario').value;

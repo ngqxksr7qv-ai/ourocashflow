@@ -335,7 +335,10 @@
 
         <!-- Calculation Settings (shown when "Calculated" is selected) -->
         <div id="calculationSettings" class="calculation-settings hidden">
-          <div class="calculation-settings-title">Calculation Settings</div>
+          <div class="calculation-settings-title">
+            Calculation Settings
+            <a href="#" class="calc-help-link" onclick="showCalcHelpModal(); return false;">How to set up monthly calculated expenses</a>
+          </div>
           <div class="form-grid">
             <div class="input-group">
               <label>Calculate</label>
@@ -643,6 +646,56 @@
           <button class="btn btn-secondary" onclick="handleDuplicates('keep')">Keep Both</button>
           <button class="btn btn-primary" onclick="handleDuplicates('replace')">Replace Existing</button>
           <button class="btn btn-danger" onclick="handleDuplicates('skip')">Skip Duplicates</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Calculated Expense Help Modal -->
+    <div id="calcHelpModal" class="modal hidden">
+      <div class="modal-overlay" onclick="hideCalcHelpModal()"></div>
+      <div class="modal-content modal-large">
+        <div class="modal-header">
+          <h3>How to Set Up Monthly Calculated Expenses</h3>
+          <button class="modal-close" onclick="hideCalcHelpModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="margin-bottom: 16px; color: var(--text-secondary);">
+            Use this guide to set up expenses that are calculated based on other items, like sales tax based on income.
+          </p>
+
+          <h4 style="margin: 16px 0 8px; color: var(--text-primary);">Example: Monthly Sales Tax on Income</h4>
+          <ol style="margin: 0; padding-left: 20px; line-height: 1.8;">
+            <li>Set <strong>Type</strong> to <strong>Expense</strong></li>
+            <li>Set <strong>Frequency</strong> to <strong>Monthly</strong></li>
+            <li>Set <strong>Date</strong> to when you want the tax to appear each month (e.g., the 15th)</li>
+            <li>Select <strong>Calculated</strong> for the amount type</li>
+            <li>Enter your tax rate in <strong>Calculate</strong> (e.g., <code>6.25</code> for 6.25%)</li>
+            <li>Set <strong>Based on</strong> to <strong>All items of type</strong> → <strong>All Income</strong></li>
+            <li>Set <strong>When to calculate</strong> to <strong>On my own schedule</strong></li>
+            <li>Set <strong>Aggregate from</strong> to <strong>Previous month</strong></li>
+          </ol>
+
+          <div style="margin-top: 20px; padding: 12px; background: var(--bg-card); border-radius: 8px; border-left: 3px solid var(--accent-blue);">
+            <strong style="color: var(--text-primary);">Result:</strong>
+            <span style="color: var(--text-secondary);">A monthly sales tax expense will appear on your chosen day, calculated as the percentage of the previous month's total income.</span>
+          </div>
+
+          <h4 style="margin: 24px 0 8px; color: var(--text-primary);">Timing Mode Options</h4>
+          <ul style="margin: 0; padding-left: 20px; line-height: 1.8; color: var(--text-secondary);">
+            <li><strong>When source items occur</strong> – The calculated entry appears each time source items occur (e.g., daily processing fees on daily sales)</li>
+            <li><strong>On my own schedule</strong> – The calculated entry follows your frequency setting and aggregates from a lookback period (e.g., monthly tax on previous month's income)</li>
+          </ul>
+
+          <h4 style="margin: 24px 0 8px; color: var(--text-primary);">Aggregate Period Options (Schedule Mode)</h4>
+          <ul style="margin: 0; padding-left: 20px; line-height: 1.8; color: var(--text-secondary);">
+            <li><strong>Previous month</strong> – Sums all source items from the previous calendar month</li>
+            <li><strong>Previous week</strong> – Sums all source items from the previous calendar week</li>
+            <li><strong>Current month (to date)</strong> – Sums source items from the current month up to this date</li>
+            <li><strong>Rolling days</strong> – Sums source items from the past N days</li>
+          </ul>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" onclick="hideCalcHelpModal()">Got it</button>
         </div>
       </div>
     </div>
