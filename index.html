@@ -410,9 +410,18 @@
             </select>
           </div>
 
+          <div class="input-group" id="timingModeGroup">
+            <label>When to calculate</label>
+            <select class="input" id="timingMode" onchange="toggleTimingMode()">
+              <option value="source_driven">When source items occur</option>
+              <option value="schedule_driven">On my own schedule (use frequency above)</option>
+            </select>
+            <div class="input-help" id="timingModeHelp">Source-driven: calculates each time source items occur. Schedule-driven: calculates on your chosen frequency, aggregating from previous period.</div>
+          </div>
+
           <div class="form-grid">
             <div class="input-group">
-              <label>Time period</label>
+              <label id="sourcePeriodLabel">Time period</label>
               <select class="input" id="sourcePeriod" onchange="toggleSourcePeriod()">
                 <option value="same_day">Same day</option>
                 <option value="same_week">Same week</option>
@@ -425,7 +434,7 @@
               <label>Look back days</label>
               <input type="number" class="input" id="sourcePeriodDays" value="30" min="1">
             </div>
-            <div class="input-group">
+            <div class="input-group" id="dateOffsetGroup">
               <label>Date offset</label>
               <div class="calc-input-row">
                 <input type="number" class="input" id="dateOffset" value="0" min="0" style="width: 80px;">

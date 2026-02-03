@@ -1024,6 +1024,132 @@ function expandLOCInterestEntry(calcEntry, baseExpanded, startDate, endDate) {
   return expanded;
 }
 
+// Expand schedule-driven calculated entries based on entry's own frequency
+function expandScheduleDrivenCalculatedEntry(calcEntry, baseExpanded, startDate, endDate, sourceEntryIds) {
+  const expanded = [];
+  const sourcePeriod = calcEntry.sourcePeriod || 'previous_month';
+
+  // First, expand the entry based on its own frequency (like a regular entry)
+  let currentDate = new Date(calcEntry.date + 'T12:00:00');
+  let occurrenceCount = 0;
+  const maxOccurrences = calcEntry.endOccurrences || Infinity;
+  const endByDate = calcEntry.endDate ? new Date(calcEntry.endDate + 'T12:00:00') : null;
+  const frequency = calcEntry.frequency || 'monthly';
+
+  // For one-time entries, just create one occurrence
+  if (frequency === 'once') {
+    if (currentDate >= startDate && currentDate <= endDate) {
+      const sourceOccurrences = getSourceOccurrencesForScheduledDate(
+        calcEntry, baseExpanded, currentDate, sourceEntryIds, sourcePeriod
+      );
+
+      if (sourceOccurrences.length > 0) {
+        const amount = calculateEntryAmount(calcEntry, sourceOccurrences, null, null);
+        expanded.push({
+          ...calcEntry,
+          date: currentDate.toISOString().split('T')[0],
+          amount: amount,
+          originalId: calcEntry.id,
+          id: calcEntry.id + '-' + currentDate.toISOString(),
+          calculatedFrom: sourceOccurrences.map(o => o.originalId),
+          sourceAmount: sourceOccurrences.reduce((sum, o) => sum + o.amount, 0)
+        });
+      }
+    }
+    return expanded;
+  }
+
+  // For recurring entries, expand based on frequency
+  while (currentDate <= endDate) {
+    if (endByDate && currentDate > endByDate) break;
+    if (occurrenceCount >= maxOccurrences) break;
+
+    if (currentDate >= startDate) {
+      // Get source occurrences for the lookback period
+      const sourceOccurrences = getSourceOccurrencesForScheduledDate(
+        calcEntry, baseExpanded, currentDate, sourceEntryIds, sourcePeriod
+      );
+
+      // Only create entry if there are source occurrences (or allow zero for schedule-driven)
+      const amount = calculateEntryAmount(calcEntry, sourceOccurrences, null, null);
+
+      expanded.push({
+        ...calcEntry,
+        date: currentDate.toISOString().split('T')[0],
+        amount: amount,
+        originalId: calcEntry.id,
+        id: calcEntry.id + '-' + currentDate.toISOString(),
+        calculatedFrom: sourceOccurrences.map(o => o.originalId),
+        sourceAmount: sourceOccurrences.reduce((sum, o) => sum + o.amount, 0)
+      });
+    }
+
+    occurrenceCount++;
+    const nextDate = getNextOccurrence(currentDate, frequency);
+    if (!nextDate) break;
+    currentDate = nextDate;
+  }
+
+  return expanded;
+}
+
+// Get source occurrences for a schedule-driven calculated entry
+function getSourceOccurrencesForScheduledDate(calcEntry, baseExpanded, occurrenceDate, sourceEntryIds, sourcePeriod) {
+  const sourceOccurrences = [];
+  const sourcePeriodDays = calcEntry.sourcePeriodDays || 30;
+
+  // Calculate the lookback period based on sourcePeriod
+  let periodStart, periodEnd;
+
+  if (sourcePeriod === 'previous_month') {
+    // Previous calendar month
+    periodEnd = new Date(occurrenceDate.getFullYear(), occurrenceDate.getMonth(), 0); // Last day of previous month
+    periodStart = new Date(periodEnd.getFullYear(), periodEnd.getMonth(), 1); // First day of previous month
+  } else if (sourcePeriod === 'previous_week') {
+    // Previous calendar week (Sun-Sat)
+    const dayOfWeek = occurrenceDate.getDay();
+    periodEnd = new Date(occurrenceDate);
+    periodEnd.setDate(occurrenceDate.getDate() - dayOfWeek - 1); // Last Saturday
+    periodStart = new Date(periodEnd);
+    periodStart.setDate(periodEnd.getDate() - 6); // Previous Sunday
+  } else if (sourcePeriod === 'same_month') {
+    // Current month up to occurrence date
+    periodStart = new Date(occurrenceDate.getFullYear(), occurrenceDate.getMonth(), 1);
+    periodEnd = new Date(occurrenceDate);
+  } else if (sourcePeriod === 'same_week') {
+    // Current week up to occurrence date (Sun-Sat)
+    const dayOfWeek = occurrenceDate.getDay();
+    periodStart = new Date(occurrenceDate);
+    periodStart.setDate(occurrenceDate.getDate() - dayOfWeek); // This Sunday
+    periodEnd = new Date(occurrenceDate);
+  } else if (sourcePeriod === 'rolling_days') {
+    // Rolling N days lookback
+    periodEnd = new Date(occurrenceDate);
+    periodStart = new Date(occurrenceDate);
+    periodStart.setDate(occurrenceDate.getDate() - sourcePeriodDays);
+  } else {
+    // Default to previous month
+    periodEnd = new Date(occurrenceDate.getFullYear(), occurrenceDate.getMonth(), 0);
+    periodStart = new Date(periodEnd.getFullYear(), periodEnd.getMonth(), 1);
+  }
+
+  // Normalize times for comparison
+  periodStart.setHours(0, 0, 0, 0);
+  periodEnd.setHours(23, 59, 59, 999);
+
+  // Find all source occurrences within the period
+  baseExpanded.forEach(occ => {
+    if (!sourceEntryIds.includes(occ.originalId)) return;
+
+    const occDate = new Date(occ.date + 'T12:00:00');
+    if (occDate >= periodStart && occDate <= periodEnd) {
+      sourceOccurrences.push(occ);
+    }
+  });
+
+  return sourceOccurrences;
+}
+
 // Expand calculated entries based on their source occurrences
 function expandCalculatedEntry(calcEntry, baseExpanded, startDate, endDate) {
   const expanded = [];
@@ -1046,6 +1172,12 @@ function expandCalculatedEntry(calcEntry, baseExpanded, startDate, endDate) {
 
   const sourcePeriod = calcEntry.sourcePeriod || 'same_day';
   const dateOffset = calcEntry.dateOffset || 0;
+  const timingMode = calcEntry.timingMode || 'source_driven';
+
+  // Handle schedule-driven timing: expand based on entry's own frequency
+  if (timingMode === 'schedule_driven') {
+    return expandScheduleDrivenCalculatedEntry(calcEntry, baseExpanded, startDate, endDate, sourceEntryIds);
+  }
 
   // For same_month and same_week, create ONE entry per period at the end of the period
   if (sourcePeriod === 'same_month' || sourcePeriod === 'same_week') {
@@ -2630,6 +2762,7 @@ function toggleCalcType() {
   const locInterestSettings = document.getElementById('locInterestSettings');
   const sourcePeriodRow = document.getElementById('sourcePeriod').closest('.form-grid');
   const calcTypeHelp = document.getElementById('calcTypeHelp');
+  const timingModeGroup = document.getElementById('timingModeGroup');
 
   if (calcType === 'balance_percentage') {
     // Hide source-based settings, show LOC interest settings
@@ -2637,6 +2770,8 @@ function toggleCalcType() {
     sourceSelectionGroup.classList.add('hidden');
     sourceTypeGroup.classList.add('hidden');
     locInterestSettings.classList.remove('hidden');
+    // Hide timing mode for LOC interest (it has its own timing mechanism)
+    if (timingModeGroup) timingModeGroup.classList.add('hidden');
 
     // Update placeholder for APR
     document.getElementById('calcValue').placeholder = '8.0';
@@ -2657,6 +2792,8 @@ function toggleCalcType() {
     // Show source-based settings, hide LOC interest settings
     sourceModeGroup.classList.remove('hidden');
     locInterestSettings.classList.add('hidden');
+    // Show timing mode for source-based calculations
+    if (timingModeGroup) timingModeGroup.classList.remove('hidden');
     toggleSourceMode(); // Restore proper source mode visibility
 
     // Update placeholder
@@ -2671,19 +2808,26 @@ function toggleCalcType() {
       }
     }
 
-    // Restore all time period options
-    const sourcePeriod = document.getElementById('sourcePeriod');
-    const currentValue = sourcePeriod.value;
-    sourcePeriod.innerHTML = `
-      <option value="same_day">Same day</option>
-      <option value="same_week">Same week</option>
-      <option value="same_month">Same month</option>
-      <option value="rolling_days">Rolling days</option>
-    `;
-    if (['same_day', 'same_week', 'same_month', 'rolling_days'].includes(currentValue)) {
-      sourcePeriod.value = currentValue;
+    // Reset timing mode to source-driven and restore appropriate options
+    const timingMode = document.getElementById('timingMode');
+    if (timingMode) {
+      timingMode.value = 'source_driven';
+      toggleTimingMode();
+    } else {
+      // Fallback if timingMode element doesn't exist
+      const sourcePeriod = document.getElementById('sourcePeriod');
+      const currentValue = sourcePeriod.value;
+      sourcePeriod.innerHTML = `
+        <option value="same_day">Same day</option>
+        <option value="same_week">Same week</option>
+        <option value="same_month">Same month</option>
+        <option value="rolling_days">Rolling days</option>
+      `;
+      if (['same_day', 'same_week', 'same_month', 'rolling_days'].includes(currentValue)) {
+        sourcePeriod.value = currentValue;
+      }
+      toggleSourcePeriod();
     }
-    toggleSourcePeriod();
   }
 }
 
@@ -2706,6 +2850,7 @@ function toggleSourcePeriod() {
   const period = document.getElementById('sourcePeriod').value;
   const rollingGroup = document.getElementById('rollingDaysGroup');
   const helpText = document.getElementById('sourcePeriodHelp');
+  const timingMode = document.getElementById('timingMode')?.value || 'source_driven';
 
   if (period === 'rolling_days') {
     rollingGroup.classList.remove('hidden');
@@ -2713,17 +2858,82 @@ function toggleSourcePeriod() {
     rollingGroup.classList.add('hidden');
   }
 
-  // Update help text based on selection
-  const helpTexts = {
-    'same_day': 'Creates a calculated entry each day the source item(s) occur. Example: Daily CC fees on daily sales. To calculate the interest payment on a loan, enter the number of days after loan taken out that the interest is due in the Date offset field.',
-    'same_week': 'Sums all source amounts in the same calendar week (Sun-Sat). Example: Weekly processing fee on all week\'s sales.',
-    'same_month': 'Sums all source amounts in the same calendar month. Example: Monthly fee based on total monthly revenue.',
-    'rolling_days': 'Sums source amounts from the past N days. Example: 30-day rolling average fee.'
-  };
+  // Update help text based on selection and timing mode
+  let helpTexts;
+  if (timingMode === 'schedule_driven') {
+    helpTexts = {
+      'previous_month': 'Aggregates all source amounts from the previous calendar month. Example: Monthly sales tax calculated on the 15th based on last month\'s income.',
+      'previous_week': 'Aggregates all source amounts from the previous calendar week (Sun-Sat). Example: Weekly report fee based on last week\'s transactions.',
+      'same_month': 'Aggregates all source amounts from the current calendar month up to this date.',
+      'same_week': 'Aggregates all source amounts from the current calendar week up to this date.',
+      'rolling_days': 'Aggregates source amounts from the past N days before each occurrence.'
+    };
+  } else {
+    helpTexts = {
+      'same_day': 'Creates a calculated entry each day the source item(s) occur. Example: Daily CC fees on daily sales. To calculate the interest payment on a loan, enter the number of days after loan taken out that the interest is due in the Date offset field.',
+      'same_week': 'Sums all source amounts in the same calendar week (Sun-Sat). Example: Weekly processing fee on all week\'s sales.',
+      'same_month': 'Sums all source amounts in the same calendar month. Example: Monthly fee based on total monthly revenue.',
+      'rolling_days': 'Sums source amounts from the past N days. Example: 30-day rolling average fee.'
+    };
+  }
 
   if (helpText) {
     helpText.textContent = helpTexts[period] || '';
   }
+}
+
+function toggleTimingMode() {
+  const timingMode = document.getElementById('timingMode').value;
+  const sourcePeriod = document.getElementById('sourcePeriod');
+  const sourcePeriodLabel = document.getElementById('sourcePeriodLabel');
+  const dateOffsetGroup = document.getElementById('dateOffsetGroup');
+  const timingModeHelp = document.getElementById('timingModeHelp');
+  const currentValue = sourcePeriod.value;
+
+  if (timingMode === 'schedule_driven') {
+    // Schedule-driven: use previous periods, show relevant options
+    sourcePeriodLabel.textContent = 'Aggregate from';
+    sourcePeriod.innerHTML = `
+      <option value="previous_month">Previous month</option>
+      <option value="previous_week">Previous week</option>
+      <option value="same_month">Current month (to date)</option>
+      <option value="same_week">Current week (to date)</option>
+      <option value="rolling_days">Rolling days</option>
+    `;
+    // Default to previous_month for schedule-driven
+    if (['same_day', 'same_week', 'same_month'].includes(currentValue)) {
+      sourcePeriod.value = 'previous_month';
+    } else if (currentValue === 'rolling_days') {
+      sourcePeriod.value = 'rolling_days';
+    }
+    // Hide date offset for schedule-driven (frequency/date controls timing)
+    dateOffsetGroup.classList.add('hidden');
+    timingModeHelp.textContent = 'The calculated entry will appear on your chosen frequency schedule (set above). It will aggregate source amounts from the selected period.';
+  } else {
+    // Source-driven: use same periods, show relevant options
+    sourcePeriodLabel.textContent = 'Time period';
+    sourcePeriod.innerHTML = `
+      <option value="same_day">Same day</option>
+      <option value="same_week">Same week</option>
+      <option value="same_month">Same month</option>
+      <option value="rolling_days">Rolling days</option>
+    `;
+    // Restore to same_day or keep rolling_days
+    if (['previous_month', 'same_month'].includes(currentValue)) {
+      sourcePeriod.value = 'same_month';
+    } else if (['previous_week', 'same_week'].includes(currentValue)) {
+      sourcePeriod.value = 'same_week';
+    } else if (currentValue === 'rolling_days') {
+      sourcePeriod.value = 'rolling_days';
+    } else {
+      sourcePeriod.value = 'same_day';
+    }
+    // Show date offset for source-driven
+    dateOffsetGroup.classList.remove('hidden');
+    timingModeHelp.textContent = 'Source-driven: calculates each time source items occur. Schedule-driven: calculates on your chosen frequency, aggregating from previous period.';
+  }
+
+  toggleSourcePeriod();
 }
 
 function populateSourceItemsList(searchTerm = null) {
@@ -2809,7 +3019,8 @@ function getCalculationFormData() {
       dateOffset: 0,
       manualOverride: false,
       locBalanceType: null,
-      periodTiming: null
+      periodTiming: null,
+      timingMode: null
     };
   }
 
@@ -2817,6 +3028,9 @@ function getCalculationFormData() {
   const sourceMode = document.getElementById('sourceMode').value;
   const useOverride = document.getElementById('useManualOverride').checked;
   const overrideAmount = parseFloat(document.getElementById('overrideAmount').value) || null;
+
+  // Get timing mode (defaults to source_driven for backwards compatibility)
+  const timingMode = document.getElementById('timingMode')?.value || 'source_driven';
 
   // Base fields for all calculation types
   const data = {
@@ -2828,7 +3042,8 @@ function getCalculationFormData() {
       ? parseInt(document.getElementById('sourcePeriodDays').value) || 30
       : null,
     dateOffset: parseInt(document.getElementById('dateOffset').value) || 0,
-    manualOverride: useOverride
+    manualOverride: useOverride,
+    timingMode: timingMode
   };
 
   // LOC balance percentage specific fields
@@ -2878,7 +3093,13 @@ function setCalculationFormData(entry) {
       }
     }
 
-    document.getElementById('sourcePeriod').value = entry.sourcePeriod || 'same_day';
+    // Set timing mode first, which updates the sourcePeriod options
+    const timingMode = entry.timingMode || 'source_driven';
+    document.getElementById('timingMode').value = timingMode;
+    toggleTimingMode();
+
+    // Now set the sourcePeriod value (after toggleTimingMode has set up the options)
+    document.getElementById('sourcePeriod').value = entry.sourcePeriod || (timingMode === 'schedule_driven' ? 'previous_month' : 'same_day');
     toggleSourcePeriod();
 
     if (entry.sourcePeriod === 'rolling_days') {
@@ -2979,6 +3200,9 @@ function resetCalculationForm() {
   document.getElementById('calcType').value = 'percentage';
   document.getElementById('sourceMode').value = 'selected';
   document.getElementById('sourceType').value = 'revenue';
+  // Reset timing mode to source-driven
+  const timingMode = document.getElementById('timingMode');
+  if (timingMode) timingMode.value = 'source_driven';
   document.getElementById('sourcePeriod').value = 'same_day';
   document.getElementById('sourcePeriodDays').value = '30';
   document.getElementById('dateOffset').value = '0';
@@ -2988,6 +3212,7 @@ function resetCalculationForm() {
   document.getElementById('periodTiming').value = 'end';
   selectedSourceIds.clear();
   toggleSourceMode();
+  if (timingMode) toggleTimingMode();
   toggleSourcePeriod();
   toggleCalcType();
   hideOverrideSection();
