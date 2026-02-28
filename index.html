@@ -68,6 +68,15 @@
       </div>
     </div>
 
+    <!-- Min Cash Threshold Alert -->
+    <div id="minCashAlert" class="alert alert-warning hidden">
+      <div class="alert-icon">📉</div>
+      <div class="alert-content">
+        <div class="alert-title">Cash projected to drop below your minimum buffer</div>
+        <div class="alert-text" id="minCashAlertText"></div>
+      </div>
+    </div>
+
     <!-- Metrics -->
     <div class="metrics-header">
       <div class="metrics-title-row">
@@ -116,6 +125,11 @@
         <div class="input-group">
           <label>Current LOC Balance</label>
           <input type="number" class="input" id="locBalance" value="0" onchange="updateSettings()" style="font-family: 'IBM Plex Mono', monospace;">
+        </div>
+        <div class="input-group">
+          <label>Minimum Cash Buffer</label>
+          <input type="number" class="input" id="minCashThreshold" value="0" min="0" onchange="updateSettings()" placeholder="0 = disabled" style="font-family: 'IBM Plex Mono', monospace;">
+          <span class="input-hint">Alert when projected cash drops below this amount</span>
         </div>
       </div>
     </div>
@@ -200,6 +214,7 @@
         <div class="chart-tooltip" id="chartTooltip">
           <div class="chart-tooltip-date" id="tooltipDate"></div>
           <div class="chart-tooltip-balance" id="tooltipBalance"></div>
+          <div class="chart-tooltip-threshold" id="tooltipThreshold"></div>
         </div>
       </div>
       <div class="scroll-container" id="forecastList"></div>

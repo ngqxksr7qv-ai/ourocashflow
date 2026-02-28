@@ -3,6 +3,7 @@ let state = {
   currentCash: 15000,
   locLimit: 50000,
   locBalance: 0,
+  minCashThreshold: 0,
   timeRange: 30,
   timelineCustomStart: null,
   timelineCustomEnd: null,
@@ -598,6 +599,7 @@ function loadState() {
     document.getElementById('currentCash').value = state.currentCash;
     document.getElementById('locLimit').value = state.locLimit;
     document.getElementById('locBalance').value = state.locBalance;
+    document.getElementById('minCashThreshold').value = state.minCashThreshold || 0;
 
     // Restore metrics timeframe
     if (state.metricsCustomStart && state.metricsCustomEnd) {
@@ -669,6 +671,7 @@ function importData(event) {
       document.getElementById('currentCash').value = state.currentCash;
       document.getElementById('locLimit').value = state.locLimit;
       document.getElementById('locBalance').value = state.locBalance;
+      document.getElementById('minCashThreshold').value = state.minCashThreshold || 0;
       saveState();
       render();
       alert('Data imported successfully!');
@@ -703,14 +706,18 @@ function formatMonthYear(date) {
 }
 
 function getStatusColor(balance) {
+  const threshold = state.minCashThreshold || 0;
   if (balance < 0) return 'var(--accent-coral)';
-  if (balance < 5000) return 'var(--accent-amber)';
+  if (threshold > 0 && balance < threshold) return 'var(--accent-amber)';
+  if (threshold === 0 && balance < 5000) return 'var(--accent-amber)';
   return 'var(--accent-green)';
 }
 
 function getStatusClass(balance) {
+  const threshold = state.minCashThreshold || 0;
   if (balance < 0) return 'negative';
-  if (balance < 5000) return 'warning';
+  if (threshold > 0 && balance < threshold) return 'warning';
+  if (threshold === 0 && balance < 5000) return 'warning';
   return 'positive';
 }
 
@@ -1325,6 +1332,9 @@ function calculateForecast(daysToForecast = 30, customStartDate = null, customEn
   let locDrawAmount = 0;
   let minBalance = state.currentCash;
   let minBalanceDate = new Date().toISOString().split('T')[0];
+  let thresholdBreached = false;
+  let thresholdBreachDate = null;
+  let thresholdBreachBalance = null;
 
   // Track upcoming LOC transactions (within 7 days)
   const upcomingLocTransactions = [];
@@ -1382,6 +1392,12 @@ function calculateForecast(daysToForecast = 30, customStartDate = null, customEn
       minBalanceDate = dateStr;
     }
 
+    if (state.minCashThreshold > 0 && runningBalance < state.minCashThreshold && !thresholdBreached) {
+      thresholdBreached = true;
+      thresholdBreachDate = dateStr;
+      thresholdBreachBalance = runningBalance;
+    }
+
     if (runningBalance < 0 && !locDrawRequired) {
       locDrawRequired = true;
       locDrawDate = dateStr;
@@ -1422,6 +1438,9 @@ function calculateForecast(daysToForecast = 30, customStartDate = null, customEn
     locDrawAmount,
     minBalance,
     minBalanceDate,
+    thresholdBreached,
+    thresholdBreachDate,
+    thresholdBreachBalance,
     upcomingLocTransactions
   };
 }
@@ -1458,6 +1477,14 @@ function renderMetrics(forecast) {
   const locAvailable = state.locLimit - state.locBalance;
   const projectedLocAvailable = state.locLimit - forecast.projectedLocBalance;
 
+  // Build threshold sub-text for lowest point metric
+  let lowestPointSub = `on ${formatDate(forecast.minBalanceDate)}`;
+  if (state.minCashThreshold > 0 && forecast.thresholdBreached) {
+    lowestPointSub += `<div class="metric-sub threshold-warning">Below ${formatCurrency(state.minCashThreshold)} buffer on ${formatDate(forecast.thresholdBreachDate)}</div>`;
+  } else if (state.minCashThreshold > 0 && !forecast.thresholdBreached) {
+    lowestPointSub += `<div class="metric-sub threshold-ok">Stays above ${formatCurrency(state.minCashThreshold)} buffer</div>`;
+  }
+
   const html = `
     <div class="metric-card highlight">
       <div class="metric-label">Current Cash</div>
@@ -1478,7 +1505,7 @@ function renderMetrics(forecast) {
     <div class="metric-card">
       <div class="metric-label">Lowest Point</div>
       <div class="metric-value ${getStatusClass(forecast.minBalance)}">${formatCurrency(forecast.minBalance)}</div>
-      <div class="metric-sub">on ${formatDate(forecast.minBalanceDate)}</div>
+      <div class="metric-sub">${lowestPointSub}</div>
     </div>
     <div class="metric-card">
       <div class="metric-label">LOC Available</div>
@@ -1522,6 +1549,16 @@ function renderLOCAlert(forecast) {
     upcomingTextEl.innerHTML = message;
   } else {
     upcomingEl.classList.add('hidden');
+  }
+
+  // Min cash threshold alert
+  const minCashAlertEl = document.getElementById('minCashAlert');
+  const minCashTextEl = document.getElementById('minCashAlertText');
+  if (forecast.thresholdBreached && state.minCashThreshold > 0) {
+    minCashAlertEl.classList.remove('hidden');
+    minCashTextEl.innerHTML = `Your cash is projected to drop below your <strong>${formatCurrency(state.minCashThreshold)}</strong> minimum buffer on <strong>${formatDate(forecast.thresholdBreachDate)}</strong> (reaching ${formatCurrency(forecast.thresholdBreachBalance)}). Consider drawing on your line of credit or raising additional funds before then.`;
+  } else {
+    minCashAlertEl.classList.add('hidden');
   }
 }
 
@@ -1567,13 +1604,20 @@ function renderChart(forecast) {
     zeroLine = `<line x1="0" y1="${zeroY}" x2="${width}" y2="${zeroY}" stroke="var(--accent-coral)" stroke-width="1.5" stroke-dasharray="6 4"/>`;
   }
 
+  let thresholdLine = '';
+  if (state.minCashThreshold > 0 && state.minCashThreshold >= minBalanceVal && state.minCashThreshold <= maxBalance) {
+    const thresholdY = padding + ((maxBalance - state.minCashThreshold) / range) * (height - padding * 2);
+    thresholdLine = `<line x1="0" y1="${thresholdY}" x2="${width}" y2="${thresholdY}" stroke="var(--accent-amber)" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+    thresholdLine += `<text x="${width - 4}" y="${thresholdY - 4}" text-anchor="end" fill="var(--accent-amber)" font-size="10" font-family="IBM Plex Mono, monospace">Min Buffer ${formatCurrency(state.minCashThreshold)}</text>`;
+  }
+
   let areaPath = pathD + ` L ${points[points.length-1].x} ${height} L ${points[0].x} ${height} Z`;
 
   let hoverPoints = points.map((p, i) =>
     `<circle cx="${p.x}" cy="${p.y}" r="8" fill="transparent" data-index="${i}" class="hover-point" style="cursor: pointer;"/>`
   ).join('');
 
-  svg.innerHTML = gridLines + zeroLine +
+  svg.innerHTML = gridLines + zeroLine + thresholdLine +
     `<path d="${areaPath}" fill="rgba(108, 158, 180, 0.1)"/>` +
     `<path d="${pathD}" fill="none" stroke="var(--accent-blue)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>` +
     points.filter((_, i) => i % Math.ceil(points.length / 15) === 0 || i === points.length - 1).map(p =>
@@ -1592,6 +1636,13 @@ function renderChart(forecast) {
       document.getElementById('tooltipDate').textContent = formatDateLong(p.date);
       document.getElementById('tooltipBalance').textContent = formatCurrency(p.balance);
       document.getElementById('tooltipBalance').style.color = getStatusColor(p.balance);
+      const thresholdEl = document.getElementById('tooltipThreshold');
+      if (state.minCashThreshold > 0 && p.balance < state.minCashThreshold) {
+        thresholdEl.textContent = `Below ${formatCurrency(state.minCashThreshold)} buffer`;
+        thresholdEl.style.display = 'block';
+      } else {
+        thresholdEl.style.display = 'none';
+      }
       tooltip.style.display = 'block';
     });
 
@@ -2349,6 +2400,7 @@ function updateSettings() {
   state.currentCash = parseFloat(document.getElementById('currentCash').value) || 0;
   state.locLimit = parseFloat(document.getElementById('locLimit').value) || 0;
   state.locBalance = parseFloat(document.getElementById('locBalance').value) || 0;
+  state.minCashThreshold = parseFloat(document.getElementById('minCashThreshold').value) || 0;
 
   if (!setupComplete) dismissSetup();
 
